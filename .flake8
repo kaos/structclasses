@@ -1,0 +1,10 @@
+[flake8]
+extend-ignore:
+  # whitespace before ':' (conflicts with Black)
+  E203,
+  # Bad trailing comma (conflicts with Black)
+  E231,
+  # line too long (> 79 characters)
+  E501,
+  # line break before binary operator  (conflicts with Black)
+  W503,

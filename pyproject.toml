@@ -1,0 +1,46 @@
+[project]
+name = "structclasses"
+authors = [{name="Andreas Stenius", email="andreas.stenius@gmail.com"}]
+license = {file = "LICENSE"}
+readme = "README.md"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dynamic = ["description", "version"]
+requires-python = ">=3.12"
+
+
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+line_length = 100
+color_output = true
+# known_first_party = ["abcd"]
+
+[tool.mypy]
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+follow_imports = "silent"
+module = [
+  # Remove modules from this list when they typecheck cleanly.
+  # "abcd.*",
+]
+
+[[tool.mypy.overrides]]
+ignore_missing_imports = true
+module = [
+  # "efgh",
+]
