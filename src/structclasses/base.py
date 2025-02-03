@@ -6,7 +6,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Annotated, Any, Iterable, Iterator, Self, get_origin
+from typing import Annotated, Any, Iterable, Iterator, get_origin
+
+from typing_extensions import Self
 
 
 class ByteOrder(Enum):

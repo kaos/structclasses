@@ -7,7 +7,9 @@ from collections.abc import ItemsView, Iterator
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
-from typing import Iterable, Self
+from typing import Iterable
+
+from typing_extensions import Self
 
 from structclasses.base import ByteOrder, Context, Field, Params
 

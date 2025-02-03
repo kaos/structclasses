@@ -1,16 +1,17 @@
 # Copyright (c) 2025 Andreas Stenius
 # This software is licensed under the MIT License.
 # See the LICENSE file for details.
+from __future__ import annotations
+
 import struct
 from collections.abc import Mapping
 from itertools import chain, islice
-from typing import Annotated, Any, Iterable, Iterator, TypeVar, Union
+from typing import Annotated, Any, Iterable, Iterator, Type, TypeVar, Union
 
 from structclasses.base import Context, Field
 from structclasses.decorator import fields, is_structclass
 
-type PrimitiveType = bytes | int | bool | float | str
-# PrimitiveTypeT = TypeVar("PrimitiveTypeT", bound=PrimitiveType)
+PrimitiveType = Type[bytes | int | bool | float | str]
 
 
 class PrimitiveField(Field):
@@ -243,4 +244,7 @@ class union:
     def __class_getitem__(cls, arg: tuple[str, tuple[Any, ElemT], ...]) -> Union[ElemT, ...]:
         selector, *options = arg
         fields = {value: Field._create_field(elem_type) for value, elem_type in options}
-        return Annotated[Union[*(t for _, t in options)], UnionField(selector, fields)]
+        # This works in py2.12, but not in py2.10... :/
+        # return Annotated[Union[*(t for _, t in options)], UnionField(selector, fields)]
+        # Dummy type for now, as we're not running type checking yet any way...
+        return Annotated[ElemT, UnionField(selector, fields)]

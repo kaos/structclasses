@@ -1,3 +1,4 @@
 black
 pytest
 twine
+typing-extensions
