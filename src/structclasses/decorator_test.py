@@ -3,8 +3,9 @@
 # See the LICENSE file for details.
 # from __future__ import annotations
 
+
 import pytest
-import struct
+
 from structclasses import ByteOrder, array, int8, record, structclass, text, union
 from structclasses.base import Context, Params
 
@@ -187,3 +188,12 @@ def test_union_type():
     assert ">iii" == s._format(context=Context(Params(), s))
     assert_roundtrip(s)
     assert len(s) == 12
+
+
+def _test_primitive_type_array():
+    @structclass
+    class PrimitiveArray:
+        data: int8[3]
+
+    s = PrimitiveArray([4, 5, 6])
+    assert ">3b" == s._format()

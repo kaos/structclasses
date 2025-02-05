@@ -2,6 +2,7 @@
 # This software is licensed under the MIT License.
 # See the LICENSE file for details.
 import struct
+from enum import IntEnum, auto
 from typing import Annotated, Any, Union
 
 import pytest
@@ -26,7 +27,6 @@ from structclasses import (
     union,
 )
 from structclasses.base import Context, Params
-from enum import IntEnum, auto
 
 
 class MyEnum(IntEnum):
