@@ -4,7 +4,7 @@
 # from __future__ import annotations
 
 import pytest
-
+import struct
 from structclasses import ByteOrder, array, int8, record, structclass, text, union
 from structclasses.base import Context, Params
 
@@ -38,6 +38,7 @@ def test_int_field(byte_order: ByteOrder, value: int, packed: bytes) -> None:
     assert value == s.a
     assert packed == s._pack()
     assert s == SimpleInt._unpack(packed)
+    assert len(s) == 4
 
 
 def test_two_fields():
@@ -52,6 +53,7 @@ def test_two_fields():
     assert 2 == s.b
     assert b"\1\2" == s._pack()
     assert_roundtrip(s)
+    assert len(s) == 2
 
 
 def test_nested_structures():
@@ -69,6 +71,7 @@ def test_nested_structures():
     s = Outer(c=3, d=Inner(1, 2), e=4)
     assert ">bbbb" == s._format()
     assert_roundtrip(s)
+    assert len(s) == 4
 
 
 @pytest.mark.parametrize(
@@ -95,6 +98,7 @@ def test_int_array(byte_order: ByteOrder, value: int, packed: bytes) -> None:
     assert f"{byte_order.value}{len(value)}i" == s._format()
     assert_roundtrip(s)
     assert packed == s._pack()
+    assert len(s) == 4 * len(value)
 
 
 @pytest.mark.parametrize(
@@ -123,6 +127,7 @@ def test_nested_int_array(byte_order: ByteOrder, value: list, size: int, packed:
     assert f"{byte_order.value}{size}s" == s._format()
     assert_roundtrip(s)
     assert packed == s._pack()
+    assert len(s) == size
 
 
 def test_text_array():
@@ -133,6 +138,7 @@ def test_text_array():
     s = TextArray(["a", "bc", "def", "ghij", "klmno"])
     assert ">25s" == s._format()
     assert_roundtrip(s)
+    assert len(s) == 25
 
 
 def test_dynamic_size_array():
@@ -145,6 +151,7 @@ def test_dynamic_size_array():
     assert ">i|" == s._format()
     assert ">i3i" == s._format(context=Context(Params(), s))
     assert_roundtrip(s)
+    assert len(s) == 16
 
 
 def test_dynamic_length_text():
@@ -157,6 +164,7 @@ def test_dynamic_length_text():
     assert ">i|" == s._format()
     assert ">i4s" == s._format(context=Context(Params(), s))
     assert_roundtrip(s)
+    assert len(s) == 8
 
 
 def test_union_type():
@@ -178,3 +186,4 @@ def test_union_type():
     assert ">i|" == s._format()
     assert ">iii" == s._format(context=Context(Params(), s))
     assert_roundtrip(s)
+    assert len(s) == 12

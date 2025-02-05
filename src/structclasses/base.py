@@ -11,6 +11,10 @@ from typing import Annotated, Any, Iterable, Iterator, get_origin
 from typing_extensions import Self
 
 
+class IncompatibleFieldTypeError(TypeError):
+    pass
+
+
 class ByteOrder(Enum):
     NATIVE = "@"
     NATIVE_STANDARD = "="
@@ -67,7 +71,7 @@ class Field(ABC):
 
     @classmethod
     def _create(cls: type[Self], field_type: type) -> Self:
-        raise TypeError(
+        raise IncompatibleFieldTypeError(
             f"this may be overridden in a subclass to add support for {field_type=} fields."
         )
 
@@ -90,7 +94,7 @@ class Field(ABC):
             for sub in Field.__subclasses__():
                 try:
                     return sub._create(field_type)
-                except TypeError:
+                except IncompatibleFieldTypeError:
                     pass
 
         raise TypeError(f"structclasses: no field type implementation for {field_type=}")

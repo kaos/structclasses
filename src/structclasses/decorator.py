@@ -54,6 +54,7 @@ def _process_class(cls, byte_order: ByteOrder, **kwargs):
     setattr(cls, "_format", partial(_format, cls=cls))
     setattr(cls, "_pack", _pack)
     setattr(cls, "_unpack", _unpack)
+    setattr(cls, "__len__", _len)
 
     return dataclass(cls, **kwargs)
 
@@ -108,3 +109,9 @@ def _unpack_field_group(
         fmt.append(fld.get_format(context))
     if fields:
         yield ("".join(fmt), fields)
+
+
+# Structclass method
+def _len(self) -> int:
+    context = Context(getattr(self, _PARAMS), self)
+    return struct.calcsize(self._format(context=context))

@@ -26,6 +26,12 @@ from structclasses import (
     union,
 )
 from structclasses.base import Context, Params
+from enum import IntEnum, auto
+
+
+class MyEnum(IntEnum):
+    A = auto()
+    B = auto()
 
 
 @pytest.mark.parametrize(
@@ -51,6 +57,7 @@ from structclasses.base import Context, Params
         (list, array[uint16, 5], "5H", [12, 23, 34, 45, 56]),
         (list, array[text[3], 3], "9s", ["a", "bc", "def"]),
         (Union, union[lambda ctx: "x", ("a", int16), ("x", text[4]), (42, bool)], "4s", "qwer"),
+        (MyEnum, MyEnum, "i", MyEnum.B),
     ],
 )
 def test_create_field(py_type: type, field_type: type | Annotated, fmt: str, value: Any) -> None:
