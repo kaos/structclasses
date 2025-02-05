@@ -6,20 +6,18 @@ from __future__ import annotations
 from typing import Annotated, Generic, Iterable, Iterator, Type, TypeVar
 
 from structclasses.base import Context, Field, IncompatibleFieldTypeError
+from structclasses.field.array import array
 
 PrimitiveType = Type[bytes | int | bool | float | str]
 T = TypeVar("T", bound=PrimitiveType)
 
 
-class PrimitiveField(Generic[T], Field):
+class PrimitiveField(Field, array):
     type_map = {
         int: "i",
         bool: "?",
         float: "f",
     }
-
-    def __class_getitem__(cls, arg):
-        return
 
     @classmethod
     def _create(cls, field_type: type) -> Field:

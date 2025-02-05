@@ -190,10 +190,16 @@ def test_union_type():
     assert len(s) == 12
 
 
-def _test_primitive_type_array():
-    @structclass
-    class PrimitiveArray:
-        data: int8[3]
+def test_primitive_type_array():
+    """This is not supported.
 
-    s = PrimitiveArray([4, 5, 6])
-    assert ">3b" == s._format()
+    (yet?)
+    """
+    with pytest.raises(TypeError):
+
+        @structclass
+        class PrimitiveArray:
+            data: int8[3]
+
+        s = PrimitiveArray([4, 5, 6])
+        assert ">3b" == s._format()
