@@ -5,6 +5,8 @@ import inspect
 import struct
 from collections.abc import ItemsView, Iterator
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
+from dataclasses import is_dataclass
 from functools import partial
 from itertools import chain
 from typing import Iterable
@@ -12,6 +14,7 @@ from typing import Iterable
 from typing_extensions import Self
 
 from structclasses.base import ByteOrder, Context, Field, Params
+from structclasses.field.meta import get_field_metadata
 
 _FIELDS = "__structclass_fields__"
 _PARAMS = "__structclass_params__"
@@ -33,7 +36,9 @@ def fields(obj) -> Iterable[tuple[str, Field]]:
 
 def structclass(cls=None, /, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN, **kwargs):
     def wrap(cls):
-        return _process_class(cls, byte_order=byte_order, **kwargs)
+        if not is_dataclass(cls):
+            cls = dataclass(cls, **kwargs)
+        return _process_class(cls, byte_order=byte_order)
 
     if cls is None:
         return wrap
@@ -41,13 +46,16 @@ def structclass(cls=None, /, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN, **kwa
     return wrap(cls)
 
 
-def _process_class(cls, byte_order: ByteOrder, **kwargs):
+def _process_class(cls, byte_order: ByteOrder):
     annotations = inspect.get_annotations(cls, eval_str=True)
+    field_meta = {fld.name: get_field_metadata(fld) for fld in dataclass_fields(cls)}
     fields = {}
     for name, type in annotations.items():
         field = Field._create_field(type)
         if field is not None:
             fields[name] = field
+            if meta := field_meta[name]:
+                field.configure(**meta)
 
     setattr(cls, _FIELDS, fields)
     setattr(cls, _PARAMS, Params(byte_order))
@@ -55,8 +63,7 @@ def _process_class(cls, byte_order: ByteOrder, **kwargs):
     setattr(cls, "_pack", _pack)
     setattr(cls, "_unpack", _unpack)
     setattr(cls, "__len__", _len)
-
-    return dataclass(cls, **kwargs)
+    return cls
 
 
 # Structclass method. (`cls` is auto-injected, so always present and valid.)
@@ -75,8 +82,11 @@ def _format(self=None, *, cls, context: Context | None = None) -> str:
 # Structclass method.
 def _pack(self) -> bytes:
     context = Context(getattr(self, _PARAMS), self)
+    fields = getattr(self, _FIELDS)
+    for field in fields.values():
+        field.update_related_fieldvalues(context)
     values = chain.from_iterable(
-        fld.prepack(getattr(self, name), context) for name, fld in getattr(self, _FIELDS).items()
+        fld.prepack(getattr(self, name), context) for name, fld in fields.items()
     )
     return struct.pack(self._format(context=context), *values)
 

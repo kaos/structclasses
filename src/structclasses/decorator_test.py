@@ -6,7 +6,7 @@
 
 import pytest
 
-from structclasses import ByteOrder, array, int8, record, structclass, text, union
+from structclasses import ByteOrder, array, field, int8, record, structclass, text, uint8, union
 from structclasses.base import Context, Params
 
 
@@ -203,3 +203,38 @@ def test_primitive_type_array():
 
         s = PrimitiveArray([4, 5, 6])
         assert ">3b" == s._format()
+
+
+def test_disjoint_dynamic_length_text():
+    """Disjoint, meaning the length is different for reading and writing."""
+
+    @structclass
+    class HeaderStuff:
+        msg_len: uint8
+
+    @structclass
+    class DisjointTextLength:
+        hdr: HeaderStuff
+        msg: text[32] = field(pack_length="msg", unpack_length="hdr.msg_len")
+
+    s = DisjointTextLength(HeaderStuff(4), "test")
+    assert ">B|" == s._format()
+    assert ">B4s" == s._format(context=Context(Params(), s))
+    assert_roundtrip(s)
+    assert len(s) == 5
+
+    with pytest.raises(ValueError):
+        # Max length for the msg field is 32
+        len(DisjointTextLength(HeaderStuff(0), "01234567890123456789012345678912x"))
+
+    v = DisjointTextLength._unpack(b"\4testing extra data not included")
+    assert v == s
+
+    v = DisjointTextLength(HeaderStuff(0), "test")._pack()
+    assert v == b"\4test"
+
+    s = DisjointTextLength(HeaderStuff(0), "01234567890123456789012345678912")
+    assert 0 == s.hdr.msg_len
+    v = s._pack()
+    assert v == b"\x2001234567890123456789012345678912"
+    assert 32 == s.hdr.msg_len

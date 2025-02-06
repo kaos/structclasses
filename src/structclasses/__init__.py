@@ -2,12 +2,13 @@
 # This software is licensed under the MIT License.
 # See the LICENSE file for details.
 """Boost your `dataclass` objects with suport for binary serialization."""
-__version__ = "0.4"
+__version__ = "0.5"
 
 from structclasses.base import Field
 from structclasses.decorator import ByteOrder, structclass
 from structclasses.field.array import array
 from structclasses.field.data import binary, text
+from structclasses.field.meta import field
 
 # from structclasses.field.enum import y
 from structclasses.field.primitive import (
@@ -32,6 +33,7 @@ __all__ = [
     "array",
     "binary",
     "double",
+    "field",
     "int16",
     "int32",
     "int64",

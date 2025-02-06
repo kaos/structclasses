@@ -23,7 +23,7 @@ class UnionField(Field):
         return self.get_field(context).postunpack(values, context)
 
     def get_field(self, context: Context) -> Field:
-        key = self.lookup(self.selector, context)
+        key = context.get(self.selector)
         if key not in self.fields:
             raise ValueError(f"structclasses: union does not have a field type for {key=}.")
         return self.fields[key]
