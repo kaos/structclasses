@@ -6,7 +6,18 @@
 
 import pytest
 
-from structclasses import ByteOrder, array, field, int8, record, structclass, text, uint8, union
+from structclasses import (
+    ByteOrder,
+    array,
+    field,
+    fields,
+    int8,
+    record,
+    structclass,
+    text,
+    uint8,
+    union,
+)
 from structclasses.base import Context, Params
 
 
@@ -205,7 +216,7 @@ def test_primitive_type_array():
         assert ">3b" == s._format()
 
 
-def test_disjoint_dynamic_length_text():
+def test_disjoint_dynamic_length_text() -> None:
     """Disjoint, meaning the length is different for reading and writing."""
 
     @structclass
@@ -238,3 +249,29 @@ def test_disjoint_dynamic_length_text():
     v = s._pack()
     assert v == b"\x2001234567890123456789012345678912"
     assert 32 == s.hdr.msg_len
+
+
+def test_override_field_def() -> None:
+    @structclass
+    class Base:
+        field_a: text[4]
+        field_b: text[5] = field(pack_length=7)
+        field_c: text[6] = field(unpack_length=8)
+
+    @structclass
+    class Augment(Base):
+        field_a: text[8] = field(pack_length=5, unpack_length=6)
+        field_b: text[9]
+
+    def _check_field(cls, name, length, pack_length, unpack_length):
+        fld = next(fld for n, fld in fields(cls) if name == n)
+        assert length == fld.length
+        assert pack_length == fld.pack_length
+        assert unpack_length == fld.unpack_length
+
+    _check_field(Base, "field_a", 4, None, None)
+    _check_field(Base, "field_b", 5, 7, None)
+    _check_field(Base, "field_c", 6, None, 8)
+    _check_field(Augment, "field_a", 8, 5, 6)
+    _check_field(Augment, "field_b", 9, None, None)
+    _check_field(Augment, "field_c", 6, None, 8)

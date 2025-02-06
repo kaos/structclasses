@@ -5,7 +5,7 @@
 __version__ = "0.5"
 
 from structclasses.base import Field
-from structclasses.decorator import ByteOrder, structclass
+from structclasses.decorator import ByteOrder, fields, structclass
 from structclasses.field.array import array
 from structclasses.field.data import binary, text
 from structclasses.field.meta import field
@@ -34,6 +34,7 @@ __all__ = [
     "binary",
     "double",
     "field",
+    "fields",
     "int16",
     "int32",
     "int64",

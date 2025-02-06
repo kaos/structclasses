@@ -1,6 +1,8 @@
 # Copyright (c) 2025 Andreas Stenius
 # This software is licensed under the MIT License.
 # See the LICENSE file for details.
+from __future__ import annotations
+
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
@@ -9,6 +11,9 @@ from enum import Enum
 from typing import Annotated, Any, Iterable, Iterator, get_origin
 
 from typing_extensions import Self
+
+# Marker value to indicate a fields length should be inherited from a superclass.
+INHERIT = object()
 
 
 class IncompatibleFieldTypeError(TypeError):
@@ -74,10 +79,12 @@ class Context:
 
 
 class Field(ABC):
+    name: str
     fmt: str
     type: type
 
     def __init__(self, field_type: type, fmt: str, **kwargs) -> None:
+        self.name = "<undef>"
         self.type = field_type
 
         try:
@@ -85,10 +92,22 @@ class Field(ABC):
         except KeyError as e:
             raise TypeError(f"structclasses: missing field type option: {e}") from e
 
+    def _register(self, name: str, fields: dict[str, Field], field_meta: dict[str, dict]) -> None:
+        self.name = name
+        if getattr(self, "length", None) is INHERIT:
+            assert (
+                name in fields
+            ), f"Can not inherit field length for {name=}. No such field found in base class."
+            self.length = fields[name].length
+        fields[name] = self
+        if meta := field_meta[name]:
+            self.configure(**meta)
+
     def __repr__(self) -> str:
+        name = self.name
         field_type = self.type
         fmt = self.fmt
-        return f"<{self.__class__.__name__} {field_type=} {fmt=}>"
+        return f"<{self.__class__.__name__} {name=} {field_type=} {fmt=}>"
 
     def get_format(self, context: Context) -> str:
         return self.fmt

@@ -36,9 +36,7 @@ def fields(obj) -> Iterable[tuple[str, Field]]:
 
 def structclass(cls=None, /, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN, **kwargs):
     def wrap(cls):
-        if not is_dataclass(cls):
-            cls = dataclass(cls, **kwargs)
-        return _process_class(cls, byte_order=byte_order)
+        return _process_class(dataclass(cls, **kwargs), byte_order=byte_order)
 
     if cls is None:
         return wrap
@@ -49,13 +47,11 @@ def structclass(cls=None, /, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN, **kwa
 def _process_class(cls, byte_order: ByteOrder):
     annotations = inspect.get_annotations(cls, eval_str=True)
     field_meta = {fld.name: get_field_metadata(fld) for fld in dataclass_fields(cls)}
-    fields = {}
+    fields = dict(getattr(cls, _FIELDS, {}))
     for name, type in annotations.items():
         field = Field._create_field(type)
         if field is not None:
-            fields[name] = field
-            if meta := field_meta[name]:
-                field.configure(**meta)
+            field._register(name, fields, field_meta)
 
     setattr(cls, _FIELDS, fields)
     setattr(cls, _PARAMS, Params(byte_order))
