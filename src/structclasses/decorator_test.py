@@ -7,8 +7,10 @@
 import pytest
 
 from structclasses import (
+    INHERIT,
     ByteOrder,
     array,
+    binary,
     field,
     fields,
     int8,
@@ -251,6 +253,13 @@ def test_disjoint_dynamic_length_text() -> None:
     assert 32 == s.hdr.msg_len
 
 
+def _check_field(cls, name, length, pack_length, unpack_length):
+    fld = next(fld for n, fld in fields(cls) if name == n)
+    assert length == fld.length
+    assert pack_length == fld.pack_length
+    assert unpack_length == fld.unpack_length
+
+
 def test_override_field_def() -> None:
     @structclass
     class Base:
@@ -263,15 +272,22 @@ def test_override_field_def() -> None:
         field_a: text[8] = field(pack_length=5, unpack_length=6)
         field_b: text[9]
 
-    def _check_field(cls, name, length, pack_length, unpack_length):
-        fld = next(fld for n, fld in fields(cls) if name == n)
-        assert length == fld.length
-        assert pack_length == fld.pack_length
-        assert unpack_length == fld.unpack_length
-
     _check_field(Base, "field_a", 4, None, None)
     _check_field(Base, "field_b", 5, 7, None)
     _check_field(Base, "field_c", 6, None, 8)
     _check_field(Augment, "field_a", 8, 5, 6)
     _check_field(Augment, "field_b", 9, None, None)
     _check_field(Augment, "field_c", 6, None, 8)
+
+
+def test_inherit_length() -> None:
+    @structclass
+    class Base:
+        field: binary[10]
+
+    @structclass
+    class Child(Base):
+        field: binary[INHERIT] = field(pack_length=2)
+
+    _check_field(Base, "field", 10, None, None)
+    _check_field(Child, "field", 10, 2, None)
