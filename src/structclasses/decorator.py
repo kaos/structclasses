@@ -59,6 +59,10 @@ def _process_class(cls, byte_order: ByteOrder):
     setattr(cls, "_pack", _pack)
     setattr(cls, "_unpack", _unpack)
     setattr(cls, "__len__", _len)
+
+    if "|" not in cls._format():
+        cls = _register_classlength(cls)
+
     return cls
 
 
@@ -121,3 +125,14 @@ def _unpack_field_group(
 def _len(self) -> int:
     context = Context(getattr(self, _PARAMS), self)
     return struct.calcsize(self._format(context=context))
+
+
+def _register_classlength(cls) -> type:
+    length = struct.calcsize(cls._format())
+    meta = type(cls)
+
+    class StructclassType(meta):
+        def __len__(self) -> int:
+            return length
+
+    return StructclassType(cls.__name__, (cls,), {})

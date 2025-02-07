@@ -86,6 +86,8 @@ def test_nested_structures():
     assert ">bbbb" == s._format()
     assert_roundtrip(s)
     assert len(s) == 4
+    assert len(Outer) == 4
+    assert len(Inner) == 2
 
 
 @pytest.mark.parametrize(
