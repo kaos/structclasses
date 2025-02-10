@@ -157,7 +157,7 @@ class Field(ABC):
 
         raise TypeError(f"structclasses: no field type implementation for {field_type=}")
 
-    def configure(self, **kwargs) -> None:
+    def configure(self, **kwargs) -> Field:
         """Field specific options.
 
         Provided using field metadata with the `structclasses.field` function.
@@ -169,7 +169,7 @@ class Field(ABC):
                 foo: uint8
                 example: text[8] = field(pack_length="example", unpack_length="foo")
         """
-        pass
+        return self
 
     def update_related_fieldvalues(self, context: Context) -> None:
         """Called when about to pack data, before the actual prepack calls."""

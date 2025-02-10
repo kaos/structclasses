@@ -2,7 +2,7 @@
 # This software is licensed under the MIT License.
 # See the LICENSE file for details.
 """Boost your `dataclass` objects with suport for binary serialization."""
-__version__ = "0.7"
+__version__ = "0.8"
 
 from structclasses.base import INHERIT, Field
 from structclasses.decorator import ByteOrder, fields, structclass

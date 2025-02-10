@@ -27,12 +27,12 @@ class BytesField(PrimitiveField):
 
     def configure(
         self, pack_length: str | None = None, unpack_length: str | None = None, **kwargs
-    ) -> None:
-        super().configure(**kwargs)
+    ) -> BytesField:
         self.pack_length = pack_length
         self.unpack_length = unpack_length
         if self.pack_length or self.unpack_length:
             self.fmt = "|"
+        return super().configure(**kwargs)
 
     def get_format(self, context: Context) -> str:
         if self.fmt != "|":
