@@ -24,13 +24,6 @@ class RecordField(Field):
         assert hasattr(self, "fields")
         super().__init__(field_type, **kwargs)
 
-    # @property
-    # def fmt(self) -> str:
-    #     return "".join(fld.fmt for fld in self.fields)
-
-    # def struct_format(self, context: Context) -> str:
-    #     return ""
-
     @classmethod
     def _create(cls, field_type: type, **kwargs) -> Field:
         if is_structclass(field_type):

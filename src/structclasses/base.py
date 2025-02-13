@@ -79,6 +79,15 @@ class Context:
         finally:
             self._scope = self._scope[:-1]
 
+    @contextmanager
+    def reset_scope(self, *scope: str) -> None:
+        restore_to = self._scope
+        try:
+            self._scope = scope
+            yield
+        finally:
+            self._scope = restore_to
+
     @property
     def struct_format(self) -> str:
         fmt = "".join(fx.struct_format for fx in self.fields)
@@ -92,8 +101,9 @@ class Context:
 
     def pack(self) -> bytes:
         if self.fields:
-            values_it = chain.from_iterable(self._pack_field(fx) for fx in self.fields)
-            self.data += struct.pack(self.struct_format, *values_it)
+            with self.reset_scope():
+                values_it = chain.from_iterable(self._pack_field(fx) for fx in self.fields)
+                self.data += struct.pack(self.struct_format, *values_it)
             self.fields = []
         return self.data
 
@@ -107,19 +117,20 @@ class Context:
 
     def unpack(self) -> Any:
         if self.fields:
-            fmt = self.struct_format
-            values_it = iter(struct.unpack_from(fmt, self.data, self.offset))
-            self.offset += struct.calcsize(fmt)
-            fields = self.fields
-            self.fields = []
-            for fx in fields:
-                with self.scope(*fx.scope):
-                    if (
-                        (value := fx.field.unpack_value(self, values_it)) is not None
-                        and fx.field.name
-                        or self._scope
-                    ):
-                        self.set(fx.field.name, value, upsert=True)
+            with self.reset_scope():
+                fmt = self.struct_format
+                values_it = iter(struct.unpack_from(fmt, self.data, self.offset))
+                self.offset += struct.calcsize(fmt)
+                fields = self.fields
+                self.fields = []
+                for fx in fields:
+                    with self.scope(*fx.scope):
+                        if (
+                            (value := fx.field.unpack_value(self, values_it)) is not None
+                            and fx.field.name
+                            or self._scope
+                        ):
+                            self.set(fx.field.name, value, upsert=True)
         return self.root
 
     def get(self, key: Any, default: Any = MISSING, set_default: bool | None = None) -> Any:

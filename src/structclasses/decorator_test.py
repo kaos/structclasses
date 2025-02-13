@@ -294,18 +294,18 @@ def test_inherit_length() -> None:
     _check_field(Child, "field", 10, 2, None)
 
 
-# def test_nested_related_fields() -> None:
-#     @structclass
-#     class Details:
-#         value_len: int = 0
-#         value: text[32] = field(default="", pack_length="value", unpack_length="value_len")
+def test_nested_related_fields() -> None:
+    @structclass
+    class Details:
+        value_len: int = 0
+        value: text[32] = field(default="", pack_length="value", unpack_length="value_len")
 
-#     @structclass
-#     class Info:
-#         details: Details
+    @structclass
+    class Info:
+        details: Details
 
-#     s = Info(Details(value="the deets"))
-#     assert ">i|" == s._format()
-#     assert ">i9s" == s._format(context=Context(Params(), s))
-#     assert_roundtrip(s)
-#     assert len(s) == 9
+    s = Info(Details(value="the deets"))
+    assert ">i|" == Info._format()
+    assert ">i9s" == s._format()
+    assert_roundtrip(s)
+    assert len(s) == 13
