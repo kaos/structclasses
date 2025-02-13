@@ -77,7 +77,7 @@ class Context:
             self._scope = (*self._scope, *scope)
             yield
         finally:
-            self._scope = self._scope[:-1]
+            self._scope = self._scope[: -len(scope)]
 
     @contextmanager
     def reset_scope(self, *scope: str) -> None:

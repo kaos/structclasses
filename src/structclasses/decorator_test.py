@@ -71,9 +71,14 @@ def test_two_fields():
 
 def test_nested_structures():
     @structclass
+    class Deep:
+        x: uint8
+
+    @structclass
     class Inner:
         a: int8
         b: int8
+        y: Deep
 
     @structclass
     class Outer:
@@ -81,12 +86,12 @@ def test_nested_structures():
         d: Inner
         e: int8
 
-    s = Outer(c=3, d=Inner(1, 2), e=4)
-    assert ">bbbb" == s._format()
+    s = Outer(c=3, d=Inner(1, 2, Deep(5)), e=4)
+    assert ">bbbBb" == s._format()
     assert_roundtrip(s)
-    assert len(s) == 4
-    assert len(Outer) == 4
-    assert len(Inner) == 2
+    assert len(s) == 5
+    assert len(Outer) == 5
+    assert len(Inner) == 3
 
 
 @pytest.mark.parametrize(

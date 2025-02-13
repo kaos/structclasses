@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 from __future__ import annotations
 
-from typing import Annotated, Any, Iterable, Iterator, Type
+from typing import Annotated, Any, Iterable, Iterator
 
 from structclasses.base import Context
 from structclasses.field.primitive import PrimitiveField
