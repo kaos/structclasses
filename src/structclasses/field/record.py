@@ -4,49 +4,67 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from itertools import chain
-from typing import Annotated, Any, Iterable, Iterator, TypeVar
+from typing import Annotated, Any, Iterable, Iterator
 
-from structclasses.base import Context, Field
+from structclasses.base import Context, Field, PrimitiveType
 from structclasses.decorator import fields, is_structclass
 
 
 class RecordField(Field):
-    def __init__(self, field_type: type, fields: Mapping[str, Field]) -> None:
-        super().__init__(field_type, "".join(fld.fmt for fld in fields.values()))
-        self.fields = fields
+    fmt: str = ""
+
+    def __class_getitem__(cls, fields: tuple[Field, ...]) -> type[RecordField]:
+        assert all(isinstance(fld, Field) for fld in fields)
+        ns = dict(fields=fields)
+        return cls._create_specialized_class(f"{cls.__name__}__{len(fields)}_fields", ns)
+
+    def __init__(self, field_type: type, fields: Iterable[Field] | None = None, **kwargs) -> None:
+        if fields is not None:
+            self.fields = tuple(fields)
+        assert hasattr(self, "fields")
+        super().__init__(field_type, **kwargs)
+
+    # @property
+    # def fmt(self) -> str:
+    #     return "".join(fld.fmt for fld in self.fields)
+
+    # def struct_format(self, context: Context) -> str:
+    #     return ""
 
     @classmethod
-    def _create(cls, field_type: type) -> Field:
+    def _create(cls, field_type: type, **kwargs) -> Field:
         if is_structclass(field_type):
-            return cls(field_type, dict(fields(field_type)))
-        return super()._create(field_type)
+            return cls(field_type, fields(field_type), **kwargs)
+        return super()._create(field_type, **kwargs)
 
-    def _get(self, value: Any, key: str) -> Any:
-        if isinstance(value, Mapping):
-            return value.get(key)
-        else:
-            return getattr(value, key, None)
+    def pack(self, context: Context) -> None:
+        """Registers this field to be included in the pack process."""
+        # No value/processing needed for the container itself.
+        # context.add(self)
+        with context.scope(self.name):
+            for fld in self.fields:
+                fld.pack(context)
 
-    def prepack(self, value: Any, context: Context) -> Iterable[PrimitiveType]:
-        assert isinstance(value, self.type)
-        return chain.from_iterable(
-            fld.prepack(self._get(value, name), context) for name, fld in self.fields.items()
-        )
+    def unpack(self, context: Context) -> None:
+        """Registers this field to be included in the unpack process."""
+        context.get(self.name, default={})
+        with context.scope(self.name):
+            for fld in self.fields:
+                fld.unpack(context)
+        # Unpack container last, so we can transform the primitive fields into
+        # the container object.
+        context.add(self)
 
-    def postunpack(self, values: Iterator[Any], context: Context) -> Any:
-        kwargs = {name: fld.postunpack(values, context) for name, fld in self.fields.items()}
-        if issubclass(self.type, Mapping):
-            return kwargs
-        else:
-            return self.type(**kwargs)
-
-
-ElemT = TypeVar("ElemT", bound=type)
+    def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:
+        with context.scope(self.name):
+            kwargs = {fld.name: context.get(fld.name) for fld in self.fields}
+        return self.type(**kwargs)
 
 
 class record:
-    def __class_getitem__(cls, arg: tuple[ElemT, tuple[str, type], ...]) -> ElemT:
+    def __class_getitem__(cls, arg: tuple[type[Mapping], tuple[str, type], ...]) -> type[Mapping]:
         container, *field_types = arg
-        fields = {name: Field._create_field(field_type) for name, field_type in field_types}
-        return Annotated[container, RecordField(container, fields)]
+        fields = tuple(
+            Field._create_field(field_type, name=name) for name, field_type in field_types
+        )
+        return Annotated[container, RecordField[fields]]

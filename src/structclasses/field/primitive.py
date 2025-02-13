@@ -3,27 +3,27 @@
 # See the LICENSE file for details.
 from __future__ import annotations
 
-from typing import Annotated, Generic, Iterable, Iterator, Type, TypeVar
+from typing import Annotated, Any, Iterable, Iterator
 
-from structclasses.base import Context, Field, IncompatibleFieldTypeError
-from structclasses.field.array import array
-
-PrimitiveType = Type[bytes | int | bool | float | str]
-T = TypeVar("T", bound=PrimitiveType)
+from structclasses.base import Context, Field, IncompatibleFieldTypeError, PrimitiveType
 
 
-class PrimitiveField(Field, array):
+class PrimitiveField(Field):
     type_map = {
         int: "i",
         bool: "?",
         float: "f",
     }
 
-    @classmethod
-    def _create(cls, field_type: type) -> Field:
-        return cls(field_type)
+    def __class_getitem__(cls, arg: tuple[PrimitiveType, str]) -> type[PrimitiveField]:
+        ns = dict(type_map=dict((arg,)))
+        return cls._create_specialized_class(f"{cls.__name__}__{arg[0].__name__}__{arg[1]}", ns)
 
-    def __init__(self, field_type: type[T], fmt: str | None = None, **kwargs) -> None:
+    @classmethod
+    def _create(cls, field_type: type, **kwargs) -> Field:
+        return cls(field_type, **kwargs)
+
+    def __init__(self, field_type: type[PrimitiveType], fmt: str | None = None, **kwargs) -> None:
         try:
             if fmt is None:
                 fmt = self.type_map[field_type]
@@ -32,26 +32,26 @@ class PrimitiveField(Field, array):
                 f"structclasses: {field_type=} is not compatible with {self.__class__.__name__}."
             ) from e
 
-        super().__init__(field_type, fmt, **kwargs)
+        super().__init__(field_type, fmt=fmt, **kwargs)
 
-    def prepack(self, value: T, context: Context) -> Iterable[T]:
+    def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
         assert isinstance(value, self.type)
         return (value,)
 
-    def postunpack(self, values: Iterator[T], context: Context) -> T:
+    def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:
         value = next(values)
         assert isinstance(value, self.type)
         return value
 
 
-int8 = Annotated[int, PrimitiveField(int, "b")]
-uint8 = Annotated[int, PrimitiveField(int, "B")]
-int16 = Annotated[int, PrimitiveField(int, "h")]
-uint16 = Annotated[int, PrimitiveField(int, "H")]
-int32 = Annotated[int, PrimitiveField(int, "i")]
-uint32 = Annotated[int, PrimitiveField(int, "I")]
-int64 = Annotated[int, PrimitiveField(int, "q")]
-uint64 = Annotated[int, PrimitiveField(int, "Q")]
-long = Annotated[int, PrimitiveField(int, "l")]
-ulong = Annotated[int, PrimitiveField(int, "L")]
-double = Annotated[float, PrimitiveField(float, "d")]
+int8 = Annotated[int, PrimitiveField[int, "b"]]
+uint8 = Annotated[int, PrimitiveField[int, "B"]]
+int16 = Annotated[int, PrimitiveField[int, "h"]]
+uint16 = Annotated[int, PrimitiveField[int, "H"]]
+int32 = Annotated[int, PrimitiveField[int, "i"]]
+uint32 = Annotated[int, PrimitiveField[int, "I"]]
+int64 = Annotated[int, PrimitiveField[int, "q"]]
+uint64 = Annotated[int, PrimitiveField[int, "Q"]]
+long = Annotated[int, PrimitiveField[int, "l"]]
+ulong = Annotated[int, PrimitiveField[int, "L"]]
+double = Annotated[float, PrimitiveField[float, "d"]]

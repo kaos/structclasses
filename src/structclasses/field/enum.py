@@ -6,24 +6,24 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Iterable, Iterator
 
-from structclasses.base import Context, Field
+from structclasses.base import Context, Field, PrimitiveType
 
 
 class EnumField(Field):
     @classmethod
-    def _create(cls, field_type: type) -> Field:
+    def _create(cls, field_type: type, **kwargs) -> Field:
         if issubclass(field_type, Enum):
-            return cls(field_type)
+            return cls(field_type, **kwargs)
         else:
-            return super()._create(field_type)
+            return super()._create(field_type, **kwargs)
 
-    def __init__(self, field_type: type[Enum]) -> None:
+    def __init__(self, field_type: type[Enum], **kwargs) -> None:
         self.member_type_field = Field._create_field(type(next(iter(field_type)).value))
-        super().__init__(field_type, self.member_type_field.fmt)
+        super().__init__(field_type, fmt=self.member_type_field.fmt, **kwargs)
 
-    def prepack(self, value: Enum, context: Context) -> Iterable[PrimitiveType]:
+    def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
         assert isinstance(value, self.type)
-        return self.member_type_field.prepack(value.value, context)
+        return self.member_type_field.pack_value(context, value.value)
 
-    def postunpack(self, values: Iterator[Any], context: Context) -> Any:
-        return self.type(self.member_type_field.postunpack(values, context))
+    def unpack_value(self, context: Context, values: Iterator[Any]) -> Any:
+        return self.type(self.member_type_field.unpack_value(context, values))

@@ -3,13 +3,8 @@
 # See the LICENSE file for details.
 import inspect
 import struct
-from collections.abc import ItemsView, Iterator
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
-from dataclasses import is_dataclass
-from functools import partial
-from itertools import chain
-from typing import Iterable
 
 from typing_extensions import Self
 
@@ -25,13 +20,13 @@ def is_structclass(obj) -> bool:
     return hasattr(cls, _FIELDS)
 
 
-def fields(obj) -> Iterable[tuple[str, Field]]:
+def fields(obj) -> tuple[Field, ...]:
     try:
         fields = getattr(obj, _FIELDS)
     except AttributeError:
         raise TypeError("must be called with a structclass type or instance") from None
 
-    return tuple(fields.items())
+    return tuple(fields.values())
 
 
 def structclass(cls=None, /, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN, **kwargs):
@@ -49,16 +44,17 @@ def _process_class(cls, byte_order: ByteOrder):
     field_meta = {fld.name: get_field_metadata(fld) for fld in dataclass_fields(cls)}
     fields = dict(getattr(cls, _FIELDS, {}))
     for name, type in annotations.items():
-        field = Field._create_field(type)
+        field = Field._create_field(type, name=name)
         if field is not None:
             field._register(name, fields, field_meta)
 
     setattr(cls, _FIELDS, fields)
     setattr(cls, _PARAMS, Params(byte_order))
-    setattr(cls, "_format", partial(_format, cls=cls))
+    setattr(cls, "_format", _format(cls=cls))
     setattr(cls, "_pack", _pack)
     setattr(cls, "_unpack", _unpack)
     setattr(cls, "__len__", _len)
+    setattr(cls, "__bool__", _bool)
 
     if "|" not in cls._format():
         cls = _register_classlength(cls)
@@ -66,65 +62,48 @@ def _process_class(cls, byte_order: ByteOrder):
     return cls
 
 
-# Structclass method. (`cls` is auto-injected, so always present and valid.)
-def _format(self=None, *, cls, context: Context | None = None) -> str:
-    obj = self or cls
-    params = context.params if context else getattr(obj, _PARAMS)
-    fmt = [params.byte_order.value]
-    fields_it = getattr(obj, _FIELDS).values()
-    if context is None:
-        fmt.extend(fld.fmt for fld in fields_it)
-    else:
-        fmt.extend(fld.get_format(context) for fld in fields_it)
-    return "".join(fmt)
+def _bool(self) -> bool:
+    return True
+
+
+def _format(cls):
+    def _do_format(self=None) -> str:
+        if self is not None:
+            meth = "pack"
+            obj = self
+        else:
+            meth = "unpack"
+            obj = {}
+        context = Context(getattr(cls, _PARAMS), obj)
+        for fld in getattr(cls, _FIELDS).values():
+            getattr(fld, meth)(context)
+        return context.struct_format
+
+    return _do_format
 
 
 # Structclass method.
 def _pack(self) -> bytes:
     context = Context(getattr(self, _PARAMS), self)
-    fields = getattr(self, _FIELDS)
-    for field in fields.values():
-        field.update_related_fieldvalues(context)
-    values = chain.from_iterable(
-        fld.prepack(getattr(self, name), context) for name, fld in fields.items()
-    )
-    return struct.pack(self._format(context=context), *values)
+    for fld in getattr(self, _FIELDS).values():
+        fld.pack(context)
+    context.pack()
+    return context.data
 
 
 # Structclass method.
 @classmethod
 def _unpack(cls: type[Self], data: bytes) -> Self:
-    offset = 0
-    kwargs = {}
-    context = Context(getattr(cls, _PARAMS), kwargs)
-    for fmt, fields in _unpack_field_group(getattr(cls, _FIELDS).items(), context):
-        values_it = iter(struct.unpack_from(fmt, data, offset))
-        offset += struct.calcsize(fmt)
-        for name, fld in fields:
-            kwargs[name] = fld.postunpack(values_it, context)
-    return cls(**kwargs)
-
-
-def _unpack_field_group(
-    fields_view: ItemsView[str, Field], context: Context
-) -> Iterator[tuple[str, list[tuple[str, Field]]]]:
-    fields = []
-    fmt = [context.params.byte_order.value]
-    for name, fld in fields_view:
-        if fld.fmt == "|":
-            yield ("".join(fmt), fields)
-            fields.clear()
-            fmt = fmt[:1]
-        fields.append((name, fld))
-        fmt.append(fld.get_format(context))
-    if fields:
-        yield ("".join(fmt), fields)
+    context = Context(getattr(cls, _PARAMS), {}, data)
+    for fld in getattr(cls, _FIELDS).values():
+        fld.unpack(context)
+    context.unpack()
+    return cls(**context.root)
 
 
 # Structclass method
 def _len(self) -> int:
-    context = Context(getattr(self, _PARAMS), self)
-    return struct.calcsize(self._format(context=context))
+    return struct.calcsize(self._format())
 
 
 def _register_classlength(cls) -> type:

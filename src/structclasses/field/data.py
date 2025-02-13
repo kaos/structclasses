@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 from __future__ import annotations
 
-from typing import Annotated, Any, Iterable, Iterator
+from typing import Annotated, Any, Iterable, Iterator, Type
 
 from structclasses.base import Context
 from structclasses.field.primitive import PrimitiveField
@@ -15,15 +15,19 @@ class BytesField(PrimitiveField):
         str: "{length}s",
     }
 
-    def __init__(
-        self, field_type: type[str | bytes], fmt: str | None = None, length: Any = None, **kwargs
-    ) -> None:
-        self.length = length
+    def __class_getitem__(cls, arg: tuple[type[str, bytes], str | int]) -> type[BytesField]:
+        field_type, length = arg
+        ns = dict(type_map={field_type: "{length}s"}, length=length)
+        return cls._create_specialized_class(f"{cls.__name__}__{field_type.__name__}__{length}", ns)
+
+    def __init__(self, field_type: type[str | bytes], length: Any = None, **kwargs) -> None:
+        if length is not None:
+            self.length = length
         self.pack_length = None
         self.unpack_length = None
-        if not isinstance(length, int):
-            fmt = "|"
-        super().__init__(field_type, fmt, length=length, **kwargs)
+        if not isinstance(self.length, int):
+            kwargs["fmt"] = "|"
+        super().__init__(field_type, length=self.length, **kwargs)
 
     def configure(
         self, pack_length: str | None = None, unpack_length: str | None = None, **kwargs
@@ -34,41 +38,48 @@ class BytesField(PrimitiveField):
             self.fmt = "|"
         return super().configure(**kwargs)
 
-    def get_format(self, context: Context) -> str:
+    def struct_format(self, context: Context) -> str:
         if self.fmt != "|":
             return self.fmt
-        if self.pack_length and context.is_packing:
-            k = self.pack_length
-        elif self.unpack_length and not context.is_packing:
-            k = self.unpack_length
-        else:
-            k = self.length
-        v = context.get(k)
-        if not isinstance(v, int):
-            v = len(v)
-        if isinstance(self.length, int) and v > self.length:
-            raise ValueError(
-                f"data does not fit in field. Field size {self.length} is less than data length {v}"
-            )
-        return f"{v}s"
+        # Unpack length is always correct at this point, also when packing.
+        return f"{self.get_length(context, self.unpack_length)}s"
 
-    def update_related_fieldvalues(self, context: Context) -> None:
-        if not self.unpack_length:
-            return
-        key = self.pack_length or self.length
-        if not isinstance(key, int):
-            key = context.get(key)
-        if not isinstance(key, int):
-            key = len(key)
-        context.set(self.unpack_length, key)
+    def get_length(self, context: Context, length: str | int | None) -> int:
+        if length is None:
+            length = self.length
+        if isinstance(length, str):
+            length = context.get(length)
+        if not isinstance(length, int):
+            length = len(length)
+        if isinstance(self.length, int) and self.length < length:
+            raise ValueError(f"{self.name}: field value too long ( {length} > {self.length} )")
+        return length
 
-    def prepack(self, value: str | bytes, context: Context) -> Iterable[bytes]:
+    def pack(self, context: Context) -> None:
+        """Registers this field to be included in the pack process."""
+        if isinstance(self.unpack_length, str):
+            # Update unpack length field when packing.
+            context.set(self.unpack_length, self.get_length(context, self.pack_length))
+        context.add(self)
+
+    def unpack(self, context: Context) -> None:
+        """Registers this field to be included in the unpack process."""
+        if isinstance(self.unpack_length or self.length, str):
+            if context.data:
+                context.unpack()
+            if context.get(self.unpack_length or self.length, default=None) is None:
+                context.add(self, struct_format="|")
+                return
+
+        context.add(self)
+
+    def pack_value(self, context: Context, value: Any) -> Iterable[bytes]:
         assert isinstance(value, self.type)
         if isinstance(value, str):
             value = value.encode()
         return (value,)
 
-    def postunpack(self, values: Iterator[bytes], context: Context) -> str | bytes:
+    def unpack_value(self, context: Context, values: Iterator[bytes]) -> Any:
         value = next(values)
         if issubclass(self.type, str):
             value = value.decode().split("\0", 1)[0]
@@ -78,9 +89,11 @@ class BytesField(PrimitiveField):
 
 class text:
     def __class_getitem__(cls, arg) -> str:
-        return Annotated[str, BytesField(str, length=arg)]
+        length = arg
+        return Annotated[str, BytesField[str, length]]
 
 
 class binary:
     def __class_getitem__(cls, arg) -> bytes:
-        return Annotated[bytes, BytesField(bytes, length=arg)]
+        length = arg
+        return Annotated[bytes, BytesField[bytes, length]]

@@ -8,6 +8,7 @@ from structclasses.base import INHERIT, Field
 from structclasses.decorator import ByteOrder, fields, structclass
 from structclasses.field.array import array
 from structclasses.field.data import binary, text
+from structclasses.field.enum import EnumField  # noqa: F401
 from structclasses.field.meta import field
 
 # from structclasses.field.enum import y

@@ -20,7 +20,6 @@ from structclasses import (
     uint8,
     union,
 )
-from structclasses.base import Context, Params
 
 
 def assert_roundtrip(value):
@@ -161,11 +160,11 @@ def test_dynamic_size_array():
     @structclass
     class DynIntArray:
         count: int
-        xs: array[int, "count"]
+        xs: array[int, "count"]  # noqa: F821
 
     s = DynIntArray(3, [11, 22, 33])
-    assert ">i|" == s._format()
-    assert ">i3i" == s._format(context=Context(Params(), s))
+    assert ">i|" == DynIntArray._format()
+    assert ">i3i" == s._format()
     assert_roundtrip(s)
     assert len(s) == 16
 
@@ -177,8 +176,8 @@ def test_dynamic_length_text():
         txt: text["len"]
 
     s = DynTextField(4, "abcd")
-    assert ">i|" == s._format()
-    assert ">i4s" == s._format(context=Context(Params(), s))
+    assert ">i|" == DynTextField._format()
+    assert ">i4s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 8
 
@@ -199,8 +198,8 @@ def test_union_type():
         v: union["typ", (0, Val1), (1, Val2)]
 
     s = UnionValue(1, Val2(2, 3))
-    assert ">i|" == s._format()
-    assert ">iii" == s._format(context=Context(Params(), s))
+    assert ">i|" == UnionValue._format()
+    assert ">iii" == s._format()
     assert_roundtrip(s)
     assert len(s) == 12
 
@@ -233,8 +232,8 @@ def test_disjoint_dynamic_length_text() -> None:
         msg: text[32] = field(pack_length="msg", unpack_length="hdr.msg_len")
 
     s = DisjointTextLength(HeaderStuff(4), "test")
-    assert ">B|" == s._format()
-    assert ">B4s" == s._format(context=Context(Params(), s))
+    assert ">B|" == DisjointTextLength._format()
+    assert ">B4s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 5
 
@@ -256,7 +255,7 @@ def test_disjoint_dynamic_length_text() -> None:
 
 
 def _check_field(cls, name, length, pack_length, unpack_length):
-    fld = next(fld for n, fld in fields(cls) if name == n)
+    fld = next(fld for fld in fields(cls) if fld.name == name)
     assert length == fld.length
     assert pack_length == fld.pack_length
     assert unpack_length == fld.unpack_length
@@ -265,21 +264,21 @@ def _check_field(cls, name, length, pack_length, unpack_length):
 def test_override_field_def() -> None:
     @structclass
     class Base:
-        field_a: text[4]
-        field_b: text[5] = field(pack_length=7)
-        field_c: text[6] = field(unpack_length=8)
+        field_a: text[44]
+        field_b: text[55] = field(pack_length=7)
+        field_c: text[66] = field(unpack_length=8)
 
     @structclass
     class Augment(Base):
-        field_a: text[8] = field(pack_length=5, unpack_length=6)
-        field_b: text[9]
+        field_a: text[88] = field(pack_length=5, unpack_length=6)
+        field_b: text[99]
 
-    _check_field(Base, "field_a", 4, None, None)
-    _check_field(Base, "field_b", 5, 7, None)
-    _check_field(Base, "field_c", 6, None, 8)
-    _check_field(Augment, "field_a", 8, 5, 6)
-    _check_field(Augment, "field_b", 9, None, None)
-    _check_field(Augment, "field_c", 6, None, 8)
+    _check_field(Base, "field_a", 44, None, None)
+    _check_field(Base, "field_b", 55, 7, None)
+    _check_field(Base, "field_c", 66, None, 8)
+    _check_field(Augment, "field_a", 88, 5, 6)
+    _check_field(Augment, "field_b", 99, None, None)
+    _check_field(Augment, "field_c", 66, None, 8)
 
 
 def test_inherit_length() -> None:
@@ -293,3 +292,20 @@ def test_inherit_length() -> None:
 
     _check_field(Base, "field", 10, None, None)
     _check_field(Child, "field", 10, 2, None)
+
+
+# def test_nested_related_fields() -> None:
+#     @structclass
+#     class Details:
+#         value_len: int = 0
+#         value: text[32] = field(default="", pack_length="value", unpack_length="value_len")
+
+#     @structclass
+#     class Info:
+#         details: Details
+
+#     s = Info(Details(value="the deets"))
+#     assert ">i|" == s._format()
+#     assert ">i9s" == s._format(context=Context(Params(), s))
+#     assert_roundtrip(s)
+#     assert len(s) == 9
