@@ -5,6 +5,7 @@ import inspect
 import struct
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
+from io import BufferedIOBase
 
 from typing_extensions import Self
 
@@ -55,6 +56,8 @@ def _process_class(cls, byte_order: ByteOrder):
     setattr(cls, "_unpack", _unpack)
     setattr(cls, "__len__", _len)
     setattr(cls, "__bool__", _bool)
+    setattr(cls, "write", _write)
+    setattr(cls, "read", _read)
 
     if "|" not in cls._format():
         cls = _register_classlength(cls)
@@ -104,6 +107,17 @@ def _unpack(cls: type[Self], data: bytes) -> Self:
 # Structclass method
 def _len(self) -> int:
     return struct.calcsize(self._format())
+
+
+# Structclass method
+def _write(self, io: BufferedIOBase) -> int | None:
+    return io.write(self._pack())
+
+
+# Structclass method
+@classmethod
+def _read(cls: type[Self], io: BufferedIOBase) -> Self:
+    return cls._unpack(io.read())
 
 
 def _register_classlength(cls) -> type:

@@ -4,6 +4,8 @@
 # from __future__ import annotations
 
 
+from io import BytesIO
+
 import pytest
 
 from structclasses import (
@@ -314,3 +316,17 @@ def test_nested_related_fields() -> None:
     assert ">i9s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 13
+
+
+def test_write_to_stream() -> None:
+    @structclass
+    class Data:
+        a: int8
+        b: int8
+
+    s = Data(0x44, 0x55)
+    io = BytesIO()
+    assert 2 == s.write(io)
+    assert b"\x44\x55" == io.getbuffer()
+    io.seek(0)
+    assert Data.read(io) == s
