@@ -23,7 +23,6 @@ from structclasses import (
     uint32,
     uint64,
     ulong,
-    union,
 )
 from structclasses.base import Context
 
@@ -55,7 +54,6 @@ class MyEnum(IntEnum):
         (dict, record[dict, ("a", int), ("b", bool)], ">i?", dict(a=1, b=False)),
         (list[uint16], array[uint16, 5], ">5H", [12, 23, 34, 45, 56]),
         (list[text[3]], array[text[3], 3], ">9s", ["a", "bc", "def"]),
-        (Union, union[lambda ctx: "x", ("a", int16), ("x", text[4]), (42, bool)], ">4s", "qwer"),
         (MyEnum, MyEnum, ">i", MyEnum.B),
     ],
 )

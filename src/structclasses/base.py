@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 from __future__ import annotations
 
+import dataclasses
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence
@@ -30,10 +31,25 @@ class ByteOrder(Enum):
     BIG_ENDIAN = ">"
     NETWORK = "!"
 
+    @classmethod
+    def get_default(cls) -> ByteOrder:
+        return cls._default
+
+    @classmethod
+    def set_default(cls, value: ByteOrder) -> None:
+        assert isinstance(value, ByteOrder)
+        cls._default = value
+
+
+ByteOrder.set_default(ByteOrder.NATIVE_STANDARD)
+
 
 @dataclass(frozen=True, slots=True)
 class Params:
-    byte_order: ByteOrder = ByteOrder.BIG_ENDIAN
+    byte_order: ByteOrder = field(default_factory=ByteOrder.get_default)
+
+    def create_context(self, **kwargs) -> Context:
+        return Context(params=self, **kwargs)
 
 
 def lookup(obj: Any, attr: str | int, *attrs: str | int) -> Any:
@@ -65,6 +81,17 @@ class Context:
     fields: list[FieldContext] = field(default_factory=list, init=False)
     offset: int = field(init=False, default=0)
     _scope: tuple[str, ...] = field(init=False, default=())
+
+    @classmethod
+    def from_obj(cls, obj) -> Context:
+        if params := getattr(obj, "__structclass_params__", None):
+            return params.create_context(root=obj)
+        else:
+            return Context(root=obj)
+
+    def new(self, **kwargs) -> Context:
+        """Create new context, using the same params."""
+        return self.params.create_context(**kwargs)
 
     @contextmanager
     def scope(self, *scope: str) -> None:
@@ -252,7 +279,9 @@ class Field(ABC):
             f"this may be overridden in a subclass to add support for {field_type=} fields."
         )
 
-    def _register(self, name: str, fields: dict[str, Field], field_meta: dict[str, dict]) -> None:
+    def _register(
+        self, name: str, fields: dict[str, Field], field_meta: dict[str, dict], **kwargs
+    ) -> None:
         assert self.name in [None, name]
         self.name = name
         if getattr(self, "length", None) is INHERIT:
@@ -297,7 +326,28 @@ class Field(ABC):
     __specialized_classes__ = {}
 
     @classmethod
-    def _create_specialized_class(cls, name: str, ns: Mapping[str, Any]) -> type:
+    def _create_specialized_class(
+        cls, name: str, ns: Mapping[str, Any], unique: bool = False
+    ) -> type:
+        if unique:
+            unique_name = name
+            count = 1
+            while unique_name in Field.__specialized_classes__:
+                count += 1
+                unique_name = f"{name}_{count}"
+            name = unique_name
+
         if name not in Field.__specialized_classes__:
             Field.__specialized_classes__[name] = type(name, (cls,), ns)
         return Field.__specialized_classes__[name]
+
+
+class NestedFieldMixin:
+    def get_nested_context(self, context: Context, *fields: Field, **kwargs) -> Context:
+        c = dataclasses.replace(context, **kwargs)
+        for fld in fields:
+            fld.unpack(context)
+        return c
+
+    def get_nested_size(self, context: Context, *fields: Field) -> None:
+        return struct.calcsize(self.get_nested_context(context, *fields).struct_format)

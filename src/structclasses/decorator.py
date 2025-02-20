@@ -30,9 +30,11 @@ def fields(obj) -> tuple[Field, ...]:
     return tuple(fields.values())
 
 
-def structclass(cls=None, /, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN, **kwargs):
+def structclass(cls=None, /, byte_order: ByteOrder | None = None, **kwargs):
     def wrap(cls):
-        return _process_class(dataclass(cls, **kwargs), byte_order=byte_order)
+        return _process_class(
+            dataclass(cls, **kwargs), byte_order=byte_order or ByteOrder.get_default()
+        )
 
     if cls is None:
         return wrap
@@ -47,7 +49,7 @@ def _process_class(cls, byte_order: ByteOrder):
     for name, type in annotations.items():
         field = Field._create_field(type, name=name)
         if field is not None:
-            field._register(name, fields, field_meta)
+            field._register(name, fields, field_meta, cls=cls)
 
     setattr(cls, _FIELDS, fields)
     setattr(cls, _PARAMS, Params(byte_order))
