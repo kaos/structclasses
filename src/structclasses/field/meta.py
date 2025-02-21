@@ -21,7 +21,7 @@ def field(
     meta_keys = [
         p.name
         for p in inspect.signature(field).parameters.values()
-        if p.kind != inspect.Parameter.POSITIONAL_OR_KEYWORD
+        if p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
     ]
     metadata = kwargs.setdefault("metadata", {})
     metadata[_META_KEY] = {key: scope[key] for key in meta_keys if scope[key] is not None}

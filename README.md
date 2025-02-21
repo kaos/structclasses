@@ -18,7 +18,7 @@ example
 -------
 
 ```python
-from structclasses import structclass, uint8, union, text, binary
+from structclasses import structclass, uint8, union, text, binary, field
 
 
 @structclass
@@ -32,12 +32,16 @@ class Demo:
   header: DemoHeader
   msg: text[32]     # The length may reference a previously defined field for dynamic length objects.
   payload: union[
-    'field_a',      # The value of the named field specifies the union type to use. (May be a callable instead for more flexibility.)
-    (0, uint8),     # When `field_a` is 0, `payload` is a `uint8`.
-    (1, binary[8])  # When `field_a` is 1, `payload` is a `binary[8]`.
-  ]
+    ("number", uint8),
+    ("data", binary[8])
+  ] = field(
+    selector="field_a",  # The value of the named field specifies the union type to use. (May be a callable instead for more flexibility.)
+    field_selector_map={
+      "number": 0,       # When `field_a` is 0, `payload` is a `uint8`.
+      "data": 1,         # When `field_a` is 1, `payload` is a `binary[8]`.
+    })
 
-demo = Demo(field_a=0, msg="hello world", header=DemoHeader(123), payload=42)
+demo = Demo(field_a=0, msg="hello world", header=DemoHeader(123), payload={"number": 42})
 
 packed_binary = demo._pack()  # => b'\x00\x00\x00\x00{hello world\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00*'
 Demo._unpack(packed_binary) == demo  # => True

@@ -11,6 +11,18 @@ from structclasses.base import Context, Field, NestedFieldMixin, lookup
 from structclasses.field.primitive import PrimitiveType
 
 
+class UnionFieldError(Exception):
+    pass
+
+
+class UnionValueNotActiveError(AttributeError, UnionFieldError):
+    pass
+
+
+class UnionFieldSelectorMapError(UnionFieldError):
+    pass
+
+
 class UnionField(Field, NestedFieldMixin):
     """Union's are a special breed. At the core, it's like a record, but with only one field at a
     time. Which field though, is the crux. It operates in one of two flavours. Either, the various
@@ -69,32 +81,39 @@ class UnionField(Field, NestedFieldMixin):
         if self.selector is None:
             return
         if self.field_selector_map:
-            for field_name, value in self.field_selector.map.items():
+            for field_name, value in self.field_selector_map.items():
                 if field_name == fld.name:
                     selected = value
                     break
             else:
-                raise ValueError(f"union field {fld.name!r} is missing in field selector map")
+                raise UnionFieldSelectorMapError(
+                    f"union field {fld.name!r} is missing in field selector map"
+                )
         else:
             selected = fld.name
-        context.set(self.selector, selected)
+        context.set(self.selector, selected, upsert=True)
 
     def selected(self, context: Context) -> Field:
+        selected = None
         if self.selector is not None:
             selected = context.get(self.selector)
-        else:
-            selected = None
-        if self.field_selector_map:
-            for field_name, value in self.field_selector_map.items():
-                if value == selected:
-                    selected = field_name
-                    break
-            else:
-                selected = None
+            if self.field_selector_map:
+                for field_name, value in self.field_selector_map.items():
+                    if value == selected:
+                        selected = field_name
+                        break
+                else:
+                    raise UnionFieldSelectorMapError(
+                        f"union selector value {selected!r} is missing in field selector map"
+                    )
+            elif not isinstance(selected, str):
+                raise UnionFieldSelectorMapError(
+                    f"union selector value {selected!r} must be translated to a union field name using a  field selector map"
+                )
         for fld in self.fields.values():
             if selected is None or selected == fld.name:
                 return fld
-        raise RuntimeError(f"unknown union member field: {selected!r}")
+        raise UnionFieldError(f"unknown union member field: {selected!r}")
 
     def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
         if not self.fields:
@@ -121,17 +140,14 @@ class union:
         return Annotated[UnionProperty, UnionField[fields]]
 
 
-class UnionValueNotActiveError(AttributeError):
-    pass
-
-
 class UnionPropertyValue:
-    __slots__ = ("__union", "__context", "__data", "__values")
+    __slots__ = ("__union", "__context", "__data", "__values", "__selected")
 
     def __init__(self, union_field: UnionField, context: Context) -> None:
         object.__setattr__(self, "_UnionPropertyValue__union", union_field)
         object.__setattr__(self, "_UnionPropertyValue__context", context)
         object.__setattr__(self, "_UnionPropertyValue__values", {})
+        object.__setattr__(self, "_UnionPropertyValue__selected", None)
 
     @property
     def __kind__(self) -> str | None:
@@ -159,6 +175,7 @@ class UnionPropertyValue:
         assert isinstance(data, bytes)
         self.__data = data
         self.__values.clear()
+        self.__selected = self.__kind__
 
     def __getattr__(self, name) -> Any:
         if name.startswith("__"):
@@ -172,9 +189,12 @@ class UnionPropertyValue:
             raise AttributeError(name)
 
         if name not in self.__values:
+            if self.__selected != self.__kind__:
+                # Reset data if kind changes, to avoid parsing data from unrelated types.
+                self.__data__ = b"\0" * fld.size
             ctx = self.__context.new(root={}, data=self.__data)
             fld.unpack(ctx)
-            self.__values[name] = fld.type(ctx.unpack()[fld.name])
+            self.__values[name] = ctx.unpack()[fld.name]
 
         return self.__values[name]
 
@@ -212,9 +232,14 @@ class UnionProperty:
             return prop
 
     def __set__(self, obj, value):
-        assert isinstance(value, bytes)
-        prop = self.__get__(obj)
-        prop.__data__ = value
+        if isinstance(value, Mapping):
+            assert len(value) == 1
+            for select, val in value.items():
+                setattr(self.__get__(obj), select, val)
+        else:
+            assert isinstance(value, bytes)
+            prop = self.__get__(obj)
+            prop.__data__ = value
 
     def __delete__(self, obj) -> None:
         prop = self.__get__(obj)
