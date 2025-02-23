@@ -50,12 +50,11 @@ class UnionField(Field, NestedFieldMixin):
         fields: Mapping[str, Field] | None = None,
         **kwargs,
     ) -> None:
-        self.selector = None
-        self.field_selector_map = None
         if fields is not None:
             self.fields = fields
         assert isinstance(self.fields, Mapping)
-        super().__init__(Union, fmt=f"{max(fld.size for fld in self.fields.values())}s", **kwargs)
+        self.configure()
+        super().__init__(Union, **kwargs)
 
     def _register(
         self, name: str, fields: dict[str, Field], field_meta: dict[str, dict], cls: type, **kwargs
@@ -75,6 +74,11 @@ class UnionField(Field, NestedFieldMixin):
     ) -> UnionField:
         self.selector = selector
         self.field_selector_map = field_selector_map
+        if self.selector is None:
+            size = max(fld.size() for fld in self.fields.values())
+            self.fmt = f"{size}s"
+        else:
+            self.fmt = "|"
         return super().configure(**kwargs)
 
     def select(self, fld: Field, context: Context) -> None:
@@ -115,6 +119,25 @@ class UnionField(Field, NestedFieldMixin):
                 return fld
         raise UnionFieldError(f"unknown union member field: {selected!r}")
 
+    def struct_format(self, context: Context) -> str:
+        if self.fmt != "|":
+            return self.fmt
+        fld = self.selected(context)
+        with context.scope(self.name):
+            size = fld.size(context)
+        return f"{size}s"
+
+    def unpack(self, context: Context) -> None:
+        """Registers this field to be included in the unpack process."""
+        if self.selector is not None:
+            if context.data:
+                context.unpack()
+            if context.get(self.selector, default=None) is None:
+                context.add(self, struct_format="|")
+                return
+
+        super().unpack(context)
+
     def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
         if not self.fields:
             return (b"",)
@@ -148,6 +171,20 @@ class UnionPropertyValue:
         object.__setattr__(self, "_UnionPropertyValue__context", context)
         object.__setattr__(self, "_UnionPropertyValue__values", {})
         object.__setattr__(self, "_UnionPropertyValue__selected", None)
+
+    def __repr__(self) -> str:
+        return f"{self.__union.name}[{self.__kind__}]<{self.__value__}>"
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, UnionPropertyValue):
+            return False
+        if self.__union != other.__union:
+            return False
+        if self.__kind__ != other.__kind__:
+            return False
+        if self.__value__ != other.__value__:
+            return False
+        return True
 
     @property
     def __kind__(self) -> str | None:
@@ -191,7 +228,7 @@ class UnionPropertyValue:
         if name not in self.__values:
             if self.__selected != self.__kind__:
                 # Reset data if kind changes, to avoid parsing data from unrelated types.
-                self.__data__ = b"\0" * fld.size
+                self.__data__ = b"\0" * fld.size()
             ctx = self.__context.new(root={}, data=self.__data)
             fld.unpack(ctx)
             self.__values[name] = ctx.unpack()[fld.name]
@@ -205,7 +242,11 @@ class UnionPropertyValue:
             self.__values[name] = value
             ctx = self.__context.new(root=self)
             fld.pack(ctx)
-            self.__data__ = struct.pack(self.__union.fmt, ctx.pack())
+            if self.__union.selector is None:
+                size = self.__union.size(self.__context)
+            else:
+                size = fld.size(ctx)
+            self.__data__ = struct.pack(f"{size}s", ctx.pack())
         else:
             super().__setattr__(name, value)
 

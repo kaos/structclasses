@@ -30,6 +30,9 @@ class RecordField(Field):
             return cls(field_type, fields(field_type), **kwargs)
         return super()._create(field_type, **kwargs)
 
+    def size(self, context: Context | None = None) -> int:
+        return sum(fld.size(context) for fld in self.fields)
+
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""
         # No value/processing needed for the container itself.

@@ -189,26 +189,28 @@ def test_dynamic_length_text():
     assert len(s) == 8
 
 
-# def test_union_type():
-#     @structclass
-#     class Val1:
-#         a: int
+def test_union_type():
+    @structclass
+    class Val1:
+        a: int
 
-#     @structclass
-#     class Val2:
-#         b: int
-#         c: int
+    @structclass
+    class Val2:
+        b: int
+        c: int
 
-#     @structclass
-#     class UnionValue:
-#         typ: int
-#         v: union["typ", (0, Val1), (1, Val2)]
+    @structclass
+    class UnionValue:
+        typ: int
+        v: union[("val1", Val1), ("val2", Val2)] = field(
+            selector="typ", field_selector_map=dict(val1=0, val2=1)
+        )
 
-#     s = UnionValue(1, Val2(2, 3))
-#     assert "=i|" == UnionValue._format()
-#     assert "=iii" == s._format()
-#     assert_roundtrip(s)
-#     assert len(s) == 12
+    s = UnionValue(1, {"val2": Val2(2, 3)})
+    assert "=i|" == UnionValue._format()
+    assert "=i8s" == s._format()
+    assert_roundtrip(s)
+    assert len(s) == 12
 
 
 def test_primitive_type_array():
@@ -259,6 +261,41 @@ def test_disjoint_dynamic_length_text() -> None:
     v = s._pack()
     assert v == b"\x2001234567890123456789012345678912"
     assert 32 == s.hdr.msg_len
+
+
+def test_disjoint_dynamic_length_array() -> None:
+    """Disjoint, meaning the length is different for reading and writing."""
+
+    @structclass
+    class HeaderStuff:
+        item_count: uint8
+
+    @structclass
+    class DisjointDataLength:
+        hdr: HeaderStuff
+        items: array[int, 3] = field(pack_length="items", unpack_length="hdr.item_count")
+
+    s = DisjointDataLength(HeaderStuff(2), [42, 24])
+    assert "=B|" == DisjointDataLength._format()
+    assert "=B2i" == s._format()
+    assert_roundtrip(s)
+    assert len(s) == 9
+
+    with pytest.raises(ValueError):
+        # Max length for the data field is 3
+        len(DisjointDataLength(HeaderStuff(0), [1, 2, 3, 4]))
+
+    v = DisjointDataLength._unpack(b"\x02*\0\0\0\x18\0\0\x00ABCDE")
+    assert v == s
+
+    v = DisjointDataLength(HeaderStuff(0), [1])._pack()
+    assert v == b"\x01\x01\0\0\0"
+
+    s = DisjointDataLength(HeaderStuff(0), [1, 2, 3])
+    assert 0 == s.hdr.item_count
+    v = s._pack()
+    assert v == b"\x03\x01\0\0\0\x02\0\0\0\x03\0\0\0"
+    assert 3 == s.hdr.item_count
 
 
 def _check_field(cls, name, length, pack_length, unpack_length):

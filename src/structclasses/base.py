@@ -120,6 +120,10 @@ class Context:
         fmt = "".join(fx.struct_format for fx in self.fields)
         return f"{self.params.byte_order.value}{fmt}"
 
+    @property
+    def size(self) -> int:
+        return len(self.data) + struct.calcsize(self.struct_format)
+
     def add(self, field: Field, **kwargs) -> None:
         if "struct_format" not in kwargs:
             kwargs["struct_format"] = field.struct_format(self)
@@ -252,9 +256,9 @@ class Field(ABC):
         """
         return self
 
-    @property
-    def size(self) -> int:
-        return struct.calcsize(self.fmt)
+    def size(self, context: Context | None = None) -> int:
+        fmt = self.struct_format(context) if context is not None else self.fmt
+        return struct.calcsize(fmt)
 
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""

@@ -24,57 +24,71 @@ class ArrayField(Field):
         return cls._create_specialized_class(f"{cls.__name__}__{elem_type.__name__}__{length}", ns)
 
     def __init__(self, field_type: type, length: int | str | None = None, **kwargs) -> None:
-        super().__init__(field_type, **kwargs)
         if not hasattr(self, "elem_field"):
             self.elem_field = Field._create_field(field_type)
         if length is not None:
             self.length = length
         assert isinstance(self.length, (str, int))
+        self.configure()
+        super().__init__(field_type, **kwargs)
 
-    # @property
-    # def fmt(self) -> str:
-    #     if isinstance(self.length, int):
-    #         try:
-    #             if self.is_packing_bytes:
-    #                 return f"{self.elem_field.size * self.length}s"
-    #             elif self.elem_field.fmt != "|":
-    #                 return f"{self.length}{self.elem_field.fmt}"
-    #         except struct.error:
-    #             # struct.calcsize chokes on any | formats
-    #             pass
-    #     return "|"
+    def configure(
+        self,
+        pack_length: str | None = None,
+        unpack_length: str | None = None,
+        **kwargs,
+    ) -> ArrayField:
+        self.pack_length = pack_length
+        self.unpack_length = unpack_length
+        if self.pack_length or self.unpack_length or isinstance(self.length, str):
+            self.fmt = "|"
+        return super().configure(**kwargs)
 
     @property
     def is_packing_bytes(self) -> bool:
         return len(self.elem_field.fmt) != 1
 
-    def get_elem_ctx(self, context: Context) -> Context:
-        c = replace(context)
-        self.elem_field.pack(c)
-        return c
+    def struct_format(self, context: Context) -> str:
+        # Unpack length is always correct at this point, also when packing.
+        length = self.get_length(context, self.unpack_length)
+        if self.is_packing_bytes:
+            with context.scope(self.name):
+                size = self.elem_field.size(context)
+            return f"{length * size}s"
+        else:
+            return f"{length}{self.elem_field.struct_format(context)}"
+
+    def get_length(self, context: Context, length: str | int | None) -> int:
+        if length is None:
+            length = self.length
+        if isinstance(length, str):
+            length = context.get(length)
+        if not isinstance(length, int):
+            length = len(length)
+        if isinstance(self.length, int) and self.length < length:
+            raise ValueError(f"{self.name}: field value too long ( {length} > {self.length} )")
+        return length
 
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""
-        length = self.get_length(context)
-        if self.is_packing_bytes:
-            size = struct.calcsize(self.get_elem_ctx(context).struct_format)
-            context.add(self, struct_format=f"{length*size}s")
-        else:
-            context.add(self, struct_format=f"{length}{self.elem_field.fmt}")
+        if isinstance(self.unpack_length, str):
+            # Update unpack length field when packing.
+            context.set(self.unpack_length, self.get_length(context, self.pack_length))
+        context.add(self)
 
     def unpack(self, context: Context) -> None:
         """Registers this field to be included in the unpack process."""
-        if not isinstance(self.length, int):
+        if isinstance(self.unpack_length or self.length, str):
             if context.data:
                 context.unpack()
-            if not context.get(None):
+            if context.get(self.unpack_length or self.length, default=None) is None:
                 context.add(self, struct_format="|")
                 return
 
-        self.pack(context)
+        context.add(self)
 
     def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
-        length = self.get_length(context)
+        length = self.get_length(context, self.pack_length)
         elem_it = islice(
             chain(value or [], (self.elem_field.type() for _ in range(length))),
             length,
@@ -92,7 +106,7 @@ class ArrayField(Field):
             yield from values_it
 
     def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:
-        length = self.get_length(context)
+        length = self.get_length(context, self.unpack_length)
         if self.is_packing_bytes:
             ctx = Context(context.params, length * [MISSING], next(values))
             for idx in range(length):
@@ -101,12 +115,6 @@ class ArrayField(Field):
             return ctx.unpack()
         else:
             return [self.elem_field.unpack_value(context, values) for _ in range(length)]
-
-    def get_length(self, context: Context) -> int:
-        if isinstance(self.length, int):
-            return self.length
-        else:
-            return context.get(self.length)
 
 
 T = TypeVar("T")
