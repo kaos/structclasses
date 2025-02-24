@@ -264,8 +264,11 @@ class Field(ABC):
         return self
 
     def size(self, context: Context | None = None) -> int:
-        fmt = self.struct_format(context) if context is not None else self.fmt
-        return struct.calcsize(fmt)
+        try:
+            fmt = self.struct_format(context) if context is not None else self.fmt
+            return struct.calcsize(fmt)
+        except struct.error as e:
+            raise TypeError(f"{self}: {fmt=}") from e
 
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""

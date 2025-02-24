@@ -53,8 +53,11 @@ class ArrayField(Field):
         length = self.get_length(context, self.unpack_length)
         if self.is_packing_bytes:
             with context.scope(self.name):
-                size = self.elem_field.size(context)
-            return f"{length * size}s"
+                size = 0
+                for idx in range(length):
+                    with context.scope(idx):
+                        size += self.elem_field.size(context)
+            return f"{size}s"
         else:
             return f"{length}{self.elem_field.struct_format(context)}"
 
