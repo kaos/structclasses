@@ -2,10 +2,10 @@
 # This software is licensed under the MIT License.
 # See the LICENSE file for details.
 """Boost your `dataclass` objects with suport for binary serialization."""
-__version__ = "0.13"
+__version__ = "0.14"
 
 from structclasses.base import INHERIT, Field
-from structclasses.decorator import ByteOrder, fields, structclass
+from structclasses.decorator import ByteOrder, fields, is_structclass, structclass
 from structclasses.field.array import array
 from structclasses.field.data import binary, text
 from structclasses.field.enum import EnumField  # noqa: F401
@@ -41,6 +41,7 @@ __all__ = [
     "int32",
     "int64",
     "int8",
+    "is_structclass",
     "long",
     "record",
     "structclass",

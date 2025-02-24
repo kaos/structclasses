@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Iterable, Iterator
 
-from structclasses.base import Context
+from structclasses.base import Context, Field
 from structclasses.field.primitive import PrimitiveField
 
 
@@ -32,6 +32,8 @@ class BytesField(PrimitiveField):
     def configure(
         self, pack_length: str | None = None, unpack_length: str | None = None, **kwargs
     ) -> BytesField:
+        if unpack_length and not isinstance(unpack_length, (str, int)):
+            unpack_length = self._create_field(unpack_length)
         self.pack_length = pack_length
         self.unpack_length = unpack_length
         if self.pack_length or self.unpack_length:
@@ -41,14 +43,21 @@ class BytesField(PrimitiveField):
     def struct_format(self, context: Context) -> str:
         if self.fmt != "|":
             return self.fmt
+        if isinstance(self.unpack_length, Field):
+            # Encode the length value to be packed into the data stream.
+            prefix = self.unpack_length.struct_format(context)
+        else:
+            prefix = ""
         # Unpack length is always correct at this point, also when packing.
-        return f"{self.get_length(context, self.unpack_length)}s"
+        return f"{prefix}{self.get_length(context, self.unpack_length)}s"
 
     def get_length(self, context: Context, length: str | int | None) -> int:
         if length is None:
             length = self.length
         if isinstance(length, str):
             length = context.get(length)
+        elif isinstance(length, Field):
+            length = len(context.get(self.name))
         if not isinstance(length, int):
             length = len(length)
         if isinstance(self.length, int) and self.length < length:
@@ -71,16 +80,32 @@ class BytesField(PrimitiveField):
                 context.add(self, struct_format="|")
                 return
 
-        context.add(self)
+        if isinstance(self.unpack_length, Field):
+            fmt = self.unpack_length.struct_format(context)
+            if not context.data:
+                fmt = f"{fmt}|"
+        else:
+            # Our struct_format gives both the length fmt and our data fmt, but
+            # when unpacking, we need to unpack the length first, or we won't
+            # know how much of data there is.
+            fmt = self.struct_format(context)
+        context.add(self, struct_format=fmt)
 
     def pack_value(self, context: Context, value: Any) -> Iterable[bytes]:
         assert isinstance(value, self.type)
         if isinstance(value, str):
             value = value.encode()
-        return (value,)
+        if isinstance(self.unpack_length, Field):
+            return (*self.unpack_length.pack_value(context, len(value)), value)
+        else:
+            return (value,)
 
     def unpack_value(self, context: Context, values: Iterator[bytes]) -> Any:
-        value = next(values)
+        if isinstance(self.unpack_length, Field):
+            length = next(values)
+            value = next(context.unpack_next(f"{length}s"))
+        else:
+            value = next(values)
         if issubclass(self.type, str):
             value = value.decode().split("\0", 1)[0]
         assert isinstance(value, self.type)

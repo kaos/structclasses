@@ -149,20 +149,23 @@ class Context:
     def unpack(self) -> Any:
         if self.fields:
             with self.reset_scope():
-                fmt = self.struct_format
-                values_it = iter(struct.unpack_from(fmt, self.data, self.offset))
-                self.offset += struct.calcsize(fmt)
+                values_it = self.unpack_next(self.struct_format)
                 fields = self.fields
                 self.fields = []
                 for fx in fields:
                     with self.scope(*fx.scope):
                         if (
                             (value := fx.field.unpack_value(self, values_it)) is not None
-                            and fx.field.name
+                            # and fx.field.name
                             or self._scope
                         ):
                             self.set(fx.field.name, value, upsert=True)
         return self.root
+
+    def unpack_next(self, fmt: str) -> Iterator[Any]:
+        values = struct.unpack_from(fmt, self.data, self.offset)
+        self.offset += struct.calcsize(fmt)
+        return iter(values)
 
     def get(self, key: Any, default: Any = MISSING, set_default: bool | None = None) -> Any:
         if callable(key):
@@ -196,10 +199,14 @@ class Context:
             attrs = key.split(".")
         elif key is not None:
             attrs = (key,)
-        else:
-            assert self._scope
+        elif self._scope:
             scope = self._scope[:-2]
             attrs = self._scope[-2:]
+        else:
+            assert upsert, "can not set root value unless upsert=True"
+            # No key, no scope, and upsert is True: set root value
+            self.root = value
+            return
         if scope or len(attrs) > 1:
             obj = lookup(self.root, *scope, *attrs[:-1])
         else:
