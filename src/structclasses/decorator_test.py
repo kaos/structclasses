@@ -170,7 +170,7 @@ def test_dynamic_size_array():
         xs: array[int, "count"]  # noqa: F821
 
     s = DynIntArray(3, [11, 22, 33])
-    assert "=i|" == DynIntArray._format()
+    assert "=i" == DynIntArray._format()
     assert "=i3i" == s._format()
     assert_roundtrip(s)
     assert len(s) == 16
@@ -183,7 +183,7 @@ def test_dynamic_length_text():
         txt: text["len"]
 
     s = DynTextField(4, "abcd")
-    assert "=i|" == DynTextField._format()
+    assert "=i" == DynTextField._format()
     assert "=i4s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 8
@@ -207,10 +207,27 @@ def test_union_type():
         )
 
     s = UnionValue(1, {"val2": Val2(2, 3)})
-    assert "=i|" == UnionValue._format()
+    assert "=i8s" == UnionValue._format()
     assert "=i8s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 12
+
+
+def test_union_nesting_array_type() -> None:
+    @structclass
+    class TypeA:
+        items: array[int, 5]
+
+    @structclass
+    class TypeB:
+        count: int
+        data: array[int, 5] = field(pack_length="data", unpack_length="count")
+
+    @structclass
+    class Unify:
+        types: union[("a", TypeA), ("b", TypeB)]
+
+    assert "=20s" == Unify._format()
 
 
 def test_primitive_type_array():
@@ -241,7 +258,7 @@ def test_disjoint_dynamic_length_text() -> None:
         msg: text[32] = field(pack_length="msg", unpack_length="hdr.msg_len")
 
     s = DisjointTextLength(HeaderStuff(4), "test")
-    assert "=B|" == DisjointTextLength._format()
+    assert "=B32s" == DisjointTextLength._format()
     assert "=B4s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 5
@@ -276,7 +293,7 @@ def test_disjoint_dynamic_length_array() -> None:
         items: array[int, 3] = field(pack_length="items", unpack_length="hdr.item_count")
 
     s = DisjointDataLength(HeaderStuff(2), [42, 24])
-    assert "=B|" == DisjointDataLength._format()
+    assert "=B3i" == DisjointDataLength._format()
     assert "=B2i" == s._format()
     assert_roundtrip(s)
     assert len(s) == 9
@@ -349,7 +366,7 @@ def test_nested_related_fields() -> None:
         details: Details
 
     s = Info(Details(value="the deets"))
-    assert "=i|" == Info._format()
+    assert "=i32s" == Info._format()
     assert "=i9s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 13

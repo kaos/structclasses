@@ -26,7 +26,7 @@ class BytesField(PrimitiveField):
         self.pack_length = None
         self.unpack_length = None
         if not isinstance(self.length, int):
-            kwargs["fmt"] = "|"
+            kwargs["fmt"] = ""
         super().__init__(field_type, length=self.length, **kwargs)
 
     def configure(
@@ -36,13 +36,9 @@ class BytesField(PrimitiveField):
             unpack_length = self._create_field(unpack_length)
         self.pack_length = pack_length
         self.unpack_length = unpack_length
-        if self.pack_length or self.unpack_length:
-            self.fmt = "|"
         return super().configure(**kwargs)
 
     def struct_format(self, context: Context) -> str:
-        if self.fmt != "|":
-            return self.fmt
         if isinstance(self.unpack_length, Field):
             # Encode the length value to be packed into the data stream.
             prefix = self.unpack_length.struct_format(context)
@@ -77,13 +73,11 @@ class BytesField(PrimitiveField):
             if context.data:
                 context.unpack()
             if context.get(self.unpack_length or self.length, default=None) is None:
-                context.add(self, struct_format="|")
+                context.add(self, struct_format=self.fmt)
                 return
 
         if isinstance(self.unpack_length, Field):
             fmt = self.unpack_length.struct_format(context)
-            if not context.data:
-                fmt = f"{fmt}|"
         else:
             # Our struct_format gives both the length fmt and our data fmt, but
             # when unpacking, we need to unpack the length first, or we won't

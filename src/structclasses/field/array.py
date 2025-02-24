@@ -26,10 +26,17 @@ class ArrayField(Field):
     def __init__(self, field_type: type, length: int | str | None = None, **kwargs) -> None:
         if not hasattr(self, "elem_field"):
             self.elem_field = Field._create_field(field_type)
+        self.pack_length = None
+        self.unpack_length = None
         if length is not None:
             self.length = length
-        assert isinstance(self.length, (str, int))
-        self.configure()
+        if isinstance(self.length, int):
+            if self.is_packing_bytes:
+                kwargs["fmt"] = f"{self.length * self.elem_field.size()}s"
+            else:
+                kwargs["fmt"] = f"{self.length}{self.elem_field.fmt}"
+        else:
+            assert isinstance(self.length, str)
         super().__init__(field_type, **kwargs)
 
     def configure(
@@ -40,8 +47,6 @@ class ArrayField(Field):
     ) -> ArrayField:
         self.pack_length = pack_length
         self.unpack_length = unpack_length
-        if self.pack_length or self.unpack_length or isinstance(self.length, str):
-            self.fmt = "|"
         return super().configure(**kwargs)
 
     @property
@@ -85,7 +90,7 @@ class ArrayField(Field):
             if context.data:
                 context.unpack()
             if context.get(self.unpack_length or self.length, default=None) is None:
-                context.add(self, struct_format="|")
+                context.add(self, struct_format=self.fmt)
                 return
 
         context.add(self)

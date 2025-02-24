@@ -61,8 +61,7 @@ def _process_class(cls, byte_order: ByteOrder):
     setattr(cls, "write", _write)
     setattr(cls, "read", _read)
 
-    if "|" not in cls._format():
-        cls = _register_classlength(cls)
+    cls = _register_classlength(cls)
 
     return cls
 

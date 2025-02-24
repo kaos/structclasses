@@ -74,11 +74,8 @@ class UnionField(Field, NestedFieldMixin):
     ) -> UnionField:
         self.selector = selector
         self.field_selector_map = field_selector_map
-        if self.selector is None:
-            size = max(fld.size() for fld in self.fields.values())
-            self.fmt = f"{size}s"
-        else:
-            self.fmt = "|"
+        size = max(fld.size() for fld in self.fields.values())
+        self.fmt = f"{size}s"
         return super().configure(**kwargs)
 
     def select(self, fld: Field, context: Context) -> None:
@@ -120,8 +117,6 @@ class UnionField(Field, NestedFieldMixin):
         raise UnionFieldError(f"unknown union member field: {selected!r}")
 
     def struct_format(self, context: Context) -> str:
-        if self.fmt != "|":
-            return self.fmt
         fld = self.selected(context)
         with context.scope(self.name):
             size = fld.size(context)
@@ -133,7 +128,7 @@ class UnionField(Field, NestedFieldMixin):
             if context.data:
                 context.unpack()
             if context.get(self.selector, default=None) is None:
-                context.add(self, struct_format="|")
+                context.add(self, struct_format=self.fmt)
                 return
 
         super().unpack(context)
