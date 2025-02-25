@@ -46,6 +46,7 @@ ByteOrder.set_default(ByteOrder.NATIVE_STANDARD)
 
 @dataclass(frozen=True, slots=True)
 class Params:
+    alignment: int = 0
     byte_order: ByteOrder = field(default_factory=ByteOrder.get_default)
 
     def create_context(self, **kwargs) -> Context:
@@ -93,6 +94,9 @@ class Context:
         """Create new context, using the same params."""
         return self.params.create_context(**kwargs)
 
+    def __post_init__(self) -> None:
+        self._align_next = 1
+
     @contextmanager
     def scope(self, *scope: str) -> None:
         scope = [s for s in scope if s is not None]
@@ -117,18 +121,40 @@ class Context:
 
     @property
     def struct_format(self) -> str:
-        fmt = "".join(fx.struct_format for fx in self.fields)
-        return f"{self.params.byte_order.value}{fmt}"
+        fields_fmt = "".join(fx.struct_format for fx in self.fields)
+        fmt = f"{self.params.byte_order.value}{fields_fmt}"
+        if self._align_next > 1 and (pad := struct.calcsize(fmt) % self._align_next) > 0:
+            fmt = f"{fmt}{self._align_next - pad}x"
+        return fmt
 
     @property
     def size(self) -> int:
         return len(self.data) + struct.calcsize(self.struct_format)
 
+    def get_padding(self, alignment: int) -> str:
+        alignment = max(alignment, self._align_next)
+        self._align_next = 1
+        if alignment <= 1:
+            return ""
+        offset = self.offset + struct.calcsize(self.struct_format)
+        pad = offset % alignment
+        if pad == 0:
+            return ""
+        else:
+            return f"{alignment - pad}x"
+
+    def align(self, alignment: int) -> None:
+        assert alignment >= 1 and alignment <= 8
+        self._align_next = alignment
+
     def add(self, field: Field, **kwargs) -> None:
         if "struct_format" not in kwargs:
-            kwargs["struct_format"] = field.struct_format(self)
+            fmt = field.struct_format(self)
+        else:
+            fmt = kwargs.pop("struct_format")
         kwargs["scope"] = (*self._scope, *kwargs.get("scope", ()))
-        self.fields.append(Context.FieldContext(field, **kwargs))
+        padding = self.get_padding(kwargs.pop("align", field.align))
+        self.fields.append(Context.FieldContext(field, struct_format=f"{padding}{fmt}", **kwargs))
 
     def pack(self) -> bytes:
         if self.fields:
@@ -231,6 +257,7 @@ PrimitiveType = Type[bytes | int | bool | float | str]
 
 
 class Field(ABC):
+    align: int
     name: str | None
     type: type
     fmt: str
@@ -245,6 +272,10 @@ class Field(ABC):
                 raise TypeError(f"structclasses: missing field type option: {e}") from e
         # May provide `fmt` as a property.
         assert hasattr(self, "fmt"), f"{self=} is missing `fmt`"
+
+        if not hasattr(self, "align"):
+            self.align = self.size()
+        assert self.align > 0 and self.align <= 8, f"{self}: bad alignment: {self.align!r}"
 
     def struct_format(self, context: Context) -> str:
         return self.fmt

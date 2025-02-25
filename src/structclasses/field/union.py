@@ -7,7 +7,7 @@ import struct
 from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Iterable, Iterator, Union
 
-from structclasses.base import Context, Field, NestedFieldMixin, lookup
+from structclasses.base import Context, Field, NestedFieldMixin
 from structclasses.field.primitive import PrimitiveType
 
 
@@ -53,6 +53,7 @@ class UnionField(Field, NestedFieldMixin):
         if fields is not None:
             self.fields = fields
         assert isinstance(self.fields, Mapping)
+        self.align = max(fld.align for fld in self.fields.values())
         self.configure()
         super().__init__(Union, **kwargs)
 

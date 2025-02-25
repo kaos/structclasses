@@ -89,6 +89,7 @@ def test_nested_structures():
         e: int8
 
     s = Outer(c=3, d=Inner(1, 2, Deep(5)), e=4)
+    assert "=bbbBb" == Outer._format()
     assert "=bbbBb" == s._format()
     assert_roundtrip(s)
     assert len(s) == 5
@@ -293,25 +294,26 @@ def test_disjoint_dynamic_length_array() -> None:
         items: array[int, 3] = field(pack_length="items", unpack_length="hdr.item_count")
 
     s = DisjointDataLength(HeaderStuff(2), [42, 24])
-    assert "=B3i" == DisjointDataLength._format()
-    assert "=B2i" == s._format()
+    assert "=B3x3i" == DisjointDataLength._format()
+    assert "=B3x2i" == s._format()
     assert_roundtrip(s)
-    assert len(s) == 9
+    assert len(s) == 12
 
     with pytest.raises(ValueError):
         # Max length for the data field is 3
         len(DisjointDataLength(HeaderStuff(0), [1, 2, 3, 4]))
 
-    v = DisjointDataLength._unpack(b"\x02*\0\0\0\x18\0\0\x00ABCDE")
+    # Pad bytes and extra at the end should be ignored.
+    v = DisjointDataLength._unpack(b"\x02\xff\xff\xff*\0\0\0\x18\0\0\x00ABCDE")
     assert v == s
 
     v = DisjointDataLength(HeaderStuff(0), [1])._pack()
-    assert v == b"\x01\x01\0\0\0"
+    assert v == b"\x01\0\0\0\x01\0\0\0"
 
     s = DisjointDataLength(HeaderStuff(0), [1, 2, 3])
     assert 0 == s.hdr.item_count
     v = s._pack()
-    assert v == b"\x03\x01\0\0\0\x02\0\0\0\x03\0\0\0"
+    assert v == b"\x03\0\0\0\x01\0\0\0\x02\0\0\0\x03\0\0\0"
     assert 3 == s.hdr.item_count
 
 
@@ -367,9 +369,9 @@ def test_nested_related_fields() -> None:
 
     s = Info(Details(value="the deets"))
     assert "=i32s" == Info._format()
-    assert "=i9s" == s._format()
+    assert "=i9s3x" == s._format()
     assert_roundtrip(s)
-    assert len(s) == 13
+    assert len(s) == 16
 
 
 def test_write_to_stream() -> None:

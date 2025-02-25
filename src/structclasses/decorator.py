@@ -30,10 +30,14 @@ def fields(obj) -> tuple[Field, ...]:
     return tuple(fields.values())
 
 
-def structclass(cls=None, /, byte_order: ByteOrder | None = None, **kwargs):
+def structclass(
+    cls=None, /, alignment: int | None = None, byte_order: ByteOrder | None = None, **kwargs
+):
     def wrap(cls):
         return _process_class(
-            dataclass(cls, **kwargs), byte_order=byte_order or ByteOrder.get_default()
+            dataclass(cls, **kwargs),
+            alignment=alignment,
+            byte_order=byte_order or ByteOrder.get_default(),
         )
 
     if cls is None:
@@ -42,17 +46,20 @@ def structclass(cls=None, /, byte_order: ByteOrder | None = None, **kwargs):
     return wrap(cls)
 
 
-def _process_class(cls, byte_order: ByteOrder):
+def _process_class(cls, alignment: int | None, byte_order: ByteOrder):
     annotations = inspect.get_annotations(cls, eval_str=True)
     field_meta = {fld.name: get_field_metadata(fld) for fld in dataclass_fields(cls)}
     fields = dict(getattr(cls, _FIELDS, {}))
+    align = alignment or 0
     for name, type in annotations.items():
         field = Field._create_field(type, name=name)
         if field is not None:
             field._register(name, fields, field_meta, cls=cls)
+            if field.align > align:
+                align = field.align
 
     setattr(cls, _FIELDS, fields)
-    setattr(cls, _PARAMS, Params(byte_order))
+    setattr(cls, _PARAMS, Params(align, byte_order))
     setattr(cls, "_format", _format(cls=cls))
     setattr(cls, "_pack", _pack)
     setattr(cls, "_unpack", _unpack)
@@ -81,7 +88,8 @@ def _format(cls):
         context = Context(getattr(cls, _PARAMS), obj)
         for fld in getattr(cls, _FIELDS).values():
             getattr(fld, meth)(context)
-        return context.struct_format
+        # padding = context.get_padding(context.params.alignment)
+        return context.struct_format  # + padding
 
     return _do_format
 
@@ -91,8 +99,10 @@ def _pack(self) -> bytes:
     context = Context(getattr(self, _PARAMS), self)
     for fld in getattr(self, _FIELDS).values():
         fld.pack(context)
-    context.pack()
-    return context.data
+    data = context.pack()
+    # if (align := len(data) % context.params.alignment) != 0:
+    #     data += align * b"\0"
+    return data
 
 
 # Structclass method.

@@ -26,6 +26,7 @@ class ArrayField(Field):
     def __init__(self, field_type: type, length: int | str | None = None, **kwargs) -> None:
         if not hasattr(self, "elem_field"):
             self.elem_field = Field._create_field(field_type)
+        self.align = self.elem_field.align
         self.pack_length = None
         self.unpack_length = None
         if length is not None:

@@ -22,6 +22,7 @@ class RecordField(Field):
         if fields is not None:
             self.fields = tuple(fields)
         assert hasattr(self, "fields")
+        self.align = max(fld.align for fld in self.fields)
         super().__init__(field_type, **kwargs)
 
     @classmethod
@@ -35,20 +36,23 @@ class RecordField(Field):
 
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""
-        # No value/processing needed for the container itself.
-        # context.add(self)
+        # No value/processing needed for the container itself, besides ensuring
+        # proper alignment around the record data.
+        context.align(self.align)
         with context.scope(self.name):
             for fld in self.fields:
                 fld.pack(context)
+        context.align(self.align)
 
     def unpack(self, context: Context) -> None:
         """Registers this field to be included in the unpack process."""
+        context.align(self.align)
         context.get(self.name, default={})
         with context.scope(self.name):
             for fld in self.fields:
                 fld.unpack(context)
         # Unpack container last, so we can transform the primitive fields into
-        # the container object.
+        # the container object. This also adds alignment padding as needed.
         context.add(self)
 
     def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:

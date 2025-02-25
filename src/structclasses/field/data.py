@@ -10,6 +10,7 @@ from structclasses.field.primitive import PrimitiveField
 
 
 class BytesField(PrimitiveField):
+    align: int = 1
     type_map = {
         bytes: "{length}s",
         str: "{length}s",
