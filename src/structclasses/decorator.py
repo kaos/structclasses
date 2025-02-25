@@ -88,8 +88,7 @@ def _format(cls):
         context = Context(getattr(cls, _PARAMS), obj)
         for fld in getattr(cls, _FIELDS).values():
             getattr(fld, meth)(context)
-        # padding = context.get_padding(context.params.alignment)
-        return context.struct_format  # + padding
+        return context.struct_format
 
     return _do_format
 
@@ -100,8 +99,6 @@ def _pack(self) -> bytes:
     for fld in getattr(self, _FIELDS).values():
         fld.pack(context)
     data = context.pack()
-    # if (align := len(data) % context.params.alignment) != 0:
-    #     data += align * b"\0"
     return data
 
 
