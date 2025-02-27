@@ -16,7 +16,9 @@ class RecordField(Field):
     def __class_getitem__(cls, fields: tuple[Field, ...]) -> type[RecordField]:
         assert all(isinstance(fld, Field) for fld in fields)
         ns = dict(fields=fields)
-        return cls._create_specialized_class(f"{cls.__name__}__{len(fields)}_fields", ns)
+        return cls._create_specialized_class(
+            f"{cls.__name__}__{len(fields)}_fields", ns, unique=True
+        )
 
     def __init__(self, field_type: type, fields: Iterable[Field] | None = None, **kwargs) -> None:
         if fields is not None:

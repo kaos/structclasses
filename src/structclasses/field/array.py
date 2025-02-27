@@ -18,10 +18,16 @@ class ArrayField(Field):
     fmt: str = ""
 
     def __class_getitem__(cls, arg: tuple[type, int | str]) -> type[ArrayField]:
-        elem_type, length = arg
-        elem_field = Field._create_field(elem_type)
+        arg_type, length = arg
+        elem_type, elem_field_type = cls._get_field_type_and_class(arg_type)
+        if elem_field_type is not None:
+            elem_field = elem_field_type(elem_type)
+        else:
+            elem_field = Field._create_field(elem_type)
         ns = dict(elem_field=elem_field, length=length)
-        return cls._create_specialized_class(f"{cls.__name__}__{elem_type.__name__}__{length}", ns)
+        return cls._create_specialized_class(
+            f"{cls.__name__}__{length}x__{type(elem_field).__name__}", ns
+        )
 
     def __init__(self, field_type: type, length: int | str | None = None, **kwargs) -> None:
         if not hasattr(self, "elem_field"):

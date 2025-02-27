@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from itertools import chain
-from typing import Annotated, Any, Iterable, Iterator, Type, get_origin
+from typing import Annotated, Any, Iterable, Iterator, Type, get_args, get_origin
 
 from typing_extensions import Self
 
@@ -343,6 +343,14 @@ class Field(ABC):
         field_type = self.type
         fmt = self.fmt
         return f"<{self.__class__.__name__} {name=} {field_type=} {fmt=}>"
+
+    @staticmethod
+    def _get_field_type_and_class(typ: type) -> tuple[type, type[Field] | None]:
+        if (origin_type := get_origin(typ)) is Annotated:
+            for meta in typ.__metadata__:
+                if isinstance(meta, type) and issubclass(meta, Field):
+                    return get_args(typ)[0], meta
+        return origin_type or typ, None
 
     @classmethod
     def _create_field(cls: type[Self], field_type: type | None = None, **kwargs) -> Self:
