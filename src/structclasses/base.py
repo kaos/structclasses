@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence
@@ -194,6 +195,8 @@ class Context:
         return iter(values)
 
     def get(self, key: Any, default: Any = MISSING, set_default: bool | None = None) -> Any:
+        if isinstance(key, (tuple, list)):
+            return tuple(self.get(k, default=default, set_default=set_default) for k in key)
         if callable(key):
             return key()
         if isinstance(key, str):
@@ -217,6 +220,14 @@ class Context:
             )
 
     def set(self, key: Any, value: Any, upsert: bool = False) -> None:
+        if isinstance(key, (tuple, list)):
+            if isinstance(value, (tuple, list)):
+                assert len(value) == len(key)
+            else:
+                value = itertools.cycle(value)
+            for k, v in zip(key, value):
+                self.set(k, v, upsert=upsert)
+            return
         if callable(key):
             key(self, value)
             return

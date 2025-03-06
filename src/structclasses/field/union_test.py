@@ -4,6 +4,7 @@
 import pytest
 
 from structclasses.decorator import fields, structclass
+from structclasses.field.data import text
 from structclasses.field.meta import field
 from structclasses.field.union import (
     UnionFieldError,
@@ -89,3 +90,32 @@ def test_create_selector_union_value() -> None:
     uc = SelectorUnionClass(None, {"a": 1234})
     assert 1 == uc.sel
     assert_props(uc.prop, "a", a=1234)
+
+
+def test_multi_selector_union() -> None:
+
+    @structclass
+    class MultiUnion:
+        a: int
+        b: text[4]
+        u: union[("a0_foo", bool), ("a0_bar", bool), ("a1_gunk", bool)] = field(
+            selector=("a", "b"),
+            field_selector_map=dict(
+                a0_foo=(0, "foo"),
+                a0_bar=(0, "bar"),
+                a1_gunk=(1, "gunk"),
+            ),
+        )
+
+    mu = MultiUnion(a=0, b="bar", u=b"\0")
+    assert mu.u.__kind__ == "a0_bar"
+    mu.b = "gunk"
+    with pytest.raises(UnionFieldSelectorMapError):
+        mu.u.__kind__
+    mu.a = 1
+    assert mu.u.__kind__ == "a1_gunk"
+    assert mu.u.a1_gunk == False
+    mu.u.a0_foo = True
+    assert mu.a == 0
+    assert mu.b == "foo"
+    assert b"\0\0\0\0foo\0\1" == mu._pack()

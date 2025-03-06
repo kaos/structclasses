@@ -128,7 +128,12 @@ class UnionField(Field, NestedFieldMixin):
         if self.selector is not None:
             if context.data:
                 context.unpack()
-            if context.get(self.selector, default=None) is None:
+            if (vs := context.get(self.selector, default=None)) is None or (
+                isinstance(vs, tuple)
+                and isinstance(self.selector, (tuple, list))
+                and len(vs) == len(self.selector)
+                and all(v is None for v in vs)
+            ):
                 context.add(self, struct_format=self.fmt)
                 return
 
