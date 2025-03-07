@@ -7,7 +7,7 @@ import struct
 from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Iterable, Iterator, Union
 
-from structclasses.base import Context, Field, NestedFieldMixin
+from structclasses.base import Context, Field
 from structclasses.field.primitive import PrimitiveType
 
 
@@ -23,7 +23,7 @@ class UnionFieldSelectorMapError(UnionFieldError):
     pass
 
 
-class UnionField(Field, NestedFieldMixin):
+class UnionField(Field):
     """Union's are a special breed. At the core, it's like a record, but with only one field at a
     time. Which field though, is the crux. It operates in one of two flavours. Either, the various
     fields is merely an intrepretation of a single binary value, or the various fields result in
@@ -71,8 +71,14 @@ class UnionField(Field, NestedFieldMixin):
         self,
         selector: str | None = None,
         field_selector_map: Mapping[str, Any] | None = None,
+        pack_length: str | None = None,
+        unpack_length: str | None = None,
         **kwargs,
     ) -> UnionField:
+        if unpack_length and not isinstance(unpack_length, (str, int)):
+            unpack_length = self._create_field(unpack_length)
+        self.pack_length = pack_length
+        self.unpack_length = unpack_length
         self.selector = selector
         self.field_selector_map = field_selector_map
         size = max(fld.size() for fld in self.fields.values())
@@ -117,27 +123,60 @@ class UnionField(Field, NestedFieldMixin):
                 return fld
         raise UnionFieldError(f"unknown union member field: {selected!r}")
 
-    def struct_format(self, context: Context) -> str:
+    def selected_size(self, context: Context) -> int:
         fld = self.selected(context)
         with context.scope(self.name):
-            size = fld.size(context)
-        return f"{size}s"
+            return fld.size(context)
+
+    def struct_format(self, context: Context) -> str:
+        # Unpack length is always correct at this point, also when packing.
+        return f"{self.get_length(context, self.unpack_length)}s"
+
+    def get_length(self, context: Context, length: str | int | None) -> int:
+        # size = self.selected_size(context)
+        if length is None:
+            length = self.selected_size(context)
+        if isinstance(length, str):
+            length = context.get(length)
+        elif isinstance(length, Field):
+            length = len(context.get(self.name))
+        if not isinstance(length, int):
+            length = len(length)
+        # if size < length:
+        #     raise ValueError(f"{self.name}: field value too long ( {length} > {size} )")
+        return length
+
+    def pack(self, context: Context) -> None:
+        """Registers this field to be included in the pack process."""
+        if isinstance(self.unpack_length, str):
+            # Update unpack length field when packing.
+            context.set(self.unpack_length, self.get_length(context, self.pack_length))
+        context.add(self)
 
     def unpack(self, context: Context) -> None:
         """Registers this field to be included in the unpack process."""
-        if self.selector is not None:
+        if self.selector is not None or isinstance(self.unpack_length, str):
             if context.data:
                 context.unpack()
-            if (vs := context.get(self.selector, default=None)) is None or (
-                isinstance(vs, tuple)
-                and isinstance(self.selector, (tuple, list))
-                and len(vs) == len(self.selector)
-                and all(v is None for v in vs)
+
+            size = None
+            if isinstance(self.unpack_length, str):
+                size = context.get(self.unpack_length, default=None)
+
+            if size is None and (
+                self.selector is None
+                or (vs := context.get(self.selector, default=None)) is None
+                or (
+                    isinstance(vs, tuple)
+                    and isinstance(self.selector, (tuple, list))
+                    and len(vs) == len(self.selector)
+                    and all(v is None for v in vs)
+                )
             ):
                 context.add(self, struct_format=self.fmt)
                 return
 
-        super().unpack(context)
+        context.add(self)
 
     def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
         if not self.fields:
@@ -187,10 +226,14 @@ class UnionPropertyValue:
             return False
         return True
 
+    def __len__(self) -> int:
+        return self.__union.selected_size(self.__context)
+
     @property
     def __kind__(self) -> str | None:
         if self.__union.selector:
-            return self.__union.selected(self.__context).name
+            with self.__context.reset_scope():
+                return self.__union.selected(self.__context).name
         else:
             return None
 

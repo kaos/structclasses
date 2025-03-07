@@ -119,3 +119,30 @@ def test_multi_selector_union() -> None:
     assert mu.a == 0
     assert mu.b == "foo"
     assert b"\0\0\0\0foo\0\1" == mu._pack()
+
+
+def test_sized_union() -> None:
+    @structclass
+    class Data:
+        len: int
+        msg: text[32] = field(pack_length="msg", unpack_length="len")
+
+    @structclass
+    class SizedUnion:
+        kind: int
+        buflen: int
+        buffer: union[("a", int), ("b", Data)] = field(
+            selector="kind",
+            pack_length="buffer",
+            unpack_length="buflen",
+            field_selector_map={"a": 1, "b": 2},
+        )
+
+    su = SizedUnion(1, 4, b"\0x42")
+    assert 12 == len(su)
+    su.buffer.b = Data(0, "test message")
+    assert 2 == su.kind
+    assert 12 == su.buffer.b.len
+    assert 24 == len(su)
+    assert 16 == su.buflen  # Not updated until the field has been `pack`ed.
+    assert b"\2\0\0\0\x10\0\0\0\x0c\0\0\0test message" == su._pack()

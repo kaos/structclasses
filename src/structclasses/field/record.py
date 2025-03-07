@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import nullcontext
 from typing import Annotated, Any, Iterable, Iterator
 
 from structclasses.base import Context, Field, PrimitiveType
@@ -34,7 +35,9 @@ class RecordField(Field):
         return super()._create(field_type, **kwargs)
 
     def size(self, context: Context | None = None) -> int:
-        return sum(fld.size(context) for fld in self.fields)
+        cm = context.scope(self.name) if context is not None else nullcontext()
+        with cm:
+            return sum(fld.size(context) for fld in self.fields)
 
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""
