@@ -6,6 +6,7 @@ import pytest
 from structclasses.decorator import fields, structclass
 from structclasses.field.data import text
 from structclasses.field.meta import field
+from structclasses.field.primitive import uint64
 from structclasses.field.union import (
     UnionFieldError,
     UnionFieldSelectorMapError,
@@ -146,3 +147,67 @@ def test_sized_union() -> None:
     assert 24 == len(su)
     assert 16 == su.buflen  # Not updated until the field has been `pack`ed.
     assert b"\2\0\0\0\x10\0\0\0\x0c\0\0\0test message" == su._pack()
+
+
+def test_union_alignment() -> None:
+    @structclass
+    class Data:
+        len: int
+        msg: text[32] = field(pack_length="msg", unpack_length="len")
+        sent: uint64
+
+    @structclass
+    class DataUnion:
+        kind: int
+        buffer: union[("a", int), ("b", Data)] = field(
+            selector="kind",
+            field_selector_map={"a": 1, "b": 2},
+        )
+
+    du = DataUnion(2, Data(0, "foo", 1)._pack())
+    assert "=i3s1xQ" == Data(0, "foo", 1)._format()
+    assert "=i4x16s" == du._format()
+    assert 24 == len(du)
+
+    Data.__structclass_fields__["sent"].configure(align=1)
+    DataUnion.__structclass_fields__["buffer"].fields["b"].configure(align=1)
+    du = DataUnion(2, Data(0, "foo", 1)._pack())
+
+    assert "=i3sQ" == Data(0, "foo", 1)._format()
+    assert "=i4x15s" == du._format()
+    assert 23 == len(du)
+
+    DataUnion.__structclass_fields__["buffer"].configure(align=4)
+
+    assert "=i15s" == du._format()
+    assert 19 == len(du)
+
+
+@pytest.mark.parametrize(
+    "pack_data, pack_union, data_fmt, union_fmt, union_len",
+    [
+        (False, False, "=i3s1xQ", "=i4x16s", 24),
+        (True, False, "=i3sQ", "=i4x15s", 23),
+        (False, True, "=i3s1xQ", "=i16s", 20),
+        (True, True, "=i3sQ", "=i15s", 19),
+    ],
+)
+def test_packed_records(pack_data, pack_union, data_fmt, union_fmt, union_len) -> None:
+    @structclass(packed=pack_data)
+    class PackedData:
+        len: int
+        msg: text[32] = field(pack_length="msg", unpack_length="len")
+        sent: uint64
+
+    @structclass(packed=pack_union)
+    class PackedUnion:
+        kind: int
+        buffer: union[("a", int), ("b", PackedData)] = field(
+            selector="kind",
+            field_selector_map={"a": 1, "b": 2},
+        )
+
+    pu = PackedUnion(2, PackedData(0, "foo", 1)._pack())
+    assert data_fmt == PackedData(0, "foo", 1)._format()
+    assert union_fmt == pu._format()
+    assert union_len == len(pu)

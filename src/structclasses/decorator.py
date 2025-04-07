@@ -30,13 +30,26 @@ def fields(obj) -> tuple[Field, ...]:
     return tuple(fields.values())
 
 
+def params(obj) -> Params:
+    try:
+        return getattr(obj, _PARAMS)
+    except AttributeError:
+        raise TypeError("must be called with a structclass type or instance") from None
+
+
 def structclass(
-    cls=None, /, alignment: int | None = None, byte_order: ByteOrder | None = None, **kwargs
+    cls=None,
+    /,
+    alignment: int | None = None,
+    byte_order: ByteOrder | None = None,
+    packed: bool | None = None,
+    **kwargs,
 ):
     def wrap(cls):
         return _process_class(
             dataclass(cls, **kwargs),
             alignment=alignment,
+            packed=packed,
             byte_order=byte_order or ByteOrder.get_default(),
         )
 
@@ -46,7 +59,7 @@ def structclass(
     return wrap(cls)
 
 
-def _process_class(cls, alignment: int | None, byte_order: ByteOrder):
+def _process_class(cls, alignment: int | None, byte_order: ByteOrder, packed: bool | None):
     annotations = inspect.get_annotations(cls, eval_str=True)
     field_meta = {fld.name: get_field_metadata(fld) for fld in dataclass_fields(cls)}
     fields = dict(getattr(cls, _FIELDS, {}))
@@ -59,7 +72,7 @@ def _process_class(cls, alignment: int | None, byte_order: ByteOrder):
                 align = field.align
 
     setattr(cls, _FIELDS, fields)
-    setattr(cls, _PARAMS, Params(align, byte_order))
+    setattr(cls, _PARAMS, Params(align, byte_order, packed or False))
     setattr(cls, "_format", _format(cls=cls))
     setattr(cls, "_pack", _pack)
     setattr(cls, "_unpack", _unpack)

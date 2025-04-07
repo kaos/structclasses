@@ -54,7 +54,12 @@ class UnionField(Field):
             self.fields = fields
         assert isinstance(self.fields, Mapping)
         self.align = max(fld.align for fld in self.fields.values())
-        self.configure()
+        self.pack_length = None
+        self.unpack_length = None
+        self.selector = None
+        self.field_selector_map = None
+        size = max(fld.size() for fld in self.fields.values())
+        self.fmt = f"{size}s"
         super().__init__(Union, **kwargs)
 
     def _register(
@@ -77,12 +82,14 @@ class UnionField(Field):
     ) -> UnionField:
         if unpack_length and not isinstance(unpack_length, (str, int)):
             unpack_length = self._create_field(unpack_length)
-        self.pack_length = pack_length
-        self.unpack_length = unpack_length
-        self.selector = selector
-        self.field_selector_map = field_selector_map
-        size = max(fld.size() for fld in self.fields.values())
-        self.fmt = f"{size}s"
+        if pack_length is not None:
+            self.pack_length = pack_length
+        if unpack_length is not None:
+            self.unpack_length = unpack_length
+        if selector is not None:
+            self.selector = selector
+        if field_selector_map is not None:
+            self.field_selector_map = field_selector_map
         return super().configure(**kwargs)
 
     def select(self, fld: Field, context: Context) -> None:

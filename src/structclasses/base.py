@@ -49,6 +49,7 @@ ByteOrder.set_default(ByteOrder.NATIVE_STANDARD)
 class Params:
     alignment: int = 0
     byte_order: ByteOrder = field(default_factory=ByteOrder.get_default)
+    packed: bool = False
 
     def create_context(self, **kwargs) -> Context:
         return Context(params=self, **kwargs)
@@ -83,6 +84,7 @@ class Context:
     fields: list[FieldContext] = field(default_factory=list, init=False)
     offset: int = field(init=False, default=0)
     _scope: tuple[str, ...] = field(init=False, default=())
+    _packed: bool | None = field(init=False, default=None)
 
     @classmethod
     def from_obj(cls, obj) -> Context:
@@ -98,27 +100,46 @@ class Context:
     def __post_init__(self) -> None:
         self._align_next = 1
 
+    @property
+    def packed(self) -> bool:
+        if self._packed is None:
+            return self.params.packed
+        else:
+            return self._packed
+
+    @packed.setter
+    def packed(self, value: bool) -> None:
+        self._packed = value
+
     @contextmanager
-    def scope(self, *scope: str) -> None:
+    def scope(self, *scope: str, packed: bool | None = None) -> None:
         scope = [s for s in scope if s is not None]
         if not scope:
             yield
             return
 
+        restore_packed = self._packed
+        if packed is not None:
+            self._packed = packed
         try:
             self._scope = (*self._scope, *scope)
             yield
         finally:
             self._scope = self._scope[: -len(scope)]
+            self._packed = restore_packed
 
     @contextmanager
-    def reset_scope(self, *scope: str) -> None:
+    def reset_scope(self, *scope: str, packed: bool | None = None) -> None:
         restore_to = self._scope
+        restore_packed = self._packed
+        if packed is not None:
+            self._packed = packed
         try:
             self._scope = scope
             yield
         finally:
             self._scope = restore_to
+            self._packed = restore_packed
 
     @property
     def struct_format(self) -> str:
@@ -135,7 +156,7 @@ class Context:
     def get_padding(self, alignment: int) -> str:
         alignment = max(alignment, self._align_next)
         self._align_next = 1
-        if alignment <= 1:
+        if alignment <= 1 or self.packed:
             return ""
         offset = self.offset + struct.calcsize(self.struct_format)
         pad = offset % alignment
@@ -145,6 +166,8 @@ class Context:
             return f"{alignment - pad}x"
 
     def align(self, alignment: int) -> None:
+        if self.packed:
+            return
         assert alignment >= 1 and alignment <= 8
         self._align_next = alignment
 
@@ -190,9 +213,12 @@ class Context:
         return self.root
 
     def unpack_next(self, fmt: str) -> Iterator[Any]:
-        values = struct.unpack_from(fmt, self.data, self.offset)
-        self.offset += struct.calcsize(fmt)
-        return iter(values)
+        try:
+            values = struct.unpack_from(fmt, self.data, self.offset)
+            self.offset += struct.calcsize(fmt)
+            return iter(values)
+        except Exception as e:
+            raise type(e)(f"{e}\n{fmt=} {self.offset=} {self.data=}") from e
 
     def get(self, key: Any, default: Any = MISSING, set_default: bool | None = None) -> Any:
         if isinstance(key, (tuple, list)):
@@ -309,8 +335,8 @@ class Field(ABC):
         return self
 
     def size(self, context: Context | None = None) -> int:
+        fmt = self.struct_format(context) if context is not None else self.fmt
         try:
-            fmt = self.struct_format(context) if context is not None else self.fmt
             return struct.calcsize(fmt)
         except struct.error as e:
             raise TypeError(f"{self}: {fmt=}") from e
