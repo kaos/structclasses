@@ -11,6 +11,7 @@ _META_KEY = "__structclass_fieldmeta__"
 
 
 def field(
+    align: int | None = None,
     pack_length: str | None = None,
     unpack_length: str | None = None,
     selector: str | None = None,
