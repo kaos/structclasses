@@ -291,7 +291,7 @@ class Field(ABC):
     def struct_format(self, context: Context) -> str:
         return self.fmt
 
-    def configure(self, **kwargs) -> Field:
+    def configure(self, align: int | None = None, **kwargs) -> Field:
         """Field specific options.
 
         Provided using field metadata with the `structclasses.field` function.
@@ -303,6 +303,9 @@ class Field(ABC):
                 foo: uint8
                 example: text[8] = field(pack_length="example", unpack_length="foo")
         """
+        if align is not None:
+            self.align = align
+            assert self.align > 0 and self.align <= 8, f"{self}: bad alignment: {self.align!r}"
         return self
 
     def size(self, context: Context | None = None) -> int:
@@ -350,10 +353,11 @@ class Field(ABC):
             self.configure(**meta)
 
     def __repr__(self) -> str:
+        align = self.align
         name = self.name
         field_type = self.type
         fmt = self.fmt
-        return f"<{self.__class__.__name__} {name=} {field_type=} {fmt=}>"
+        return f"<{self.__class__.__name__} {name=} {field_type=} {fmt=} {align=}>"
 
     @staticmethod
     def _get_field_type_and_class(typ: type) -> tuple[type, type[Field] | None]:
