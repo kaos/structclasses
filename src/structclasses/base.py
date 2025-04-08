@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import itertools
+import re
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence
@@ -68,6 +69,20 @@ def lookup(obj: Any, attr: str | int, *attrs: str | int) -> Any:
         return lookup(obj, *attrs)
     else:
         return obj
+
+
+def join_struct_formats(fmts: Iterable[str]) -> str:
+    acc = []
+    for fmt in fmts:
+        if m := re.match(r"(\d+)(\w)$", fmt):
+            n, f = m.groups()
+        else:
+            n, f = 1, fmt
+        if len(f) == 1 and 0 < len(acc) and acc[-1][1] == f and f not in "ps":
+            acc[-1] = acc[-1][0] + int(n), f
+        else:
+            acc.append((int(n), f))
+    return "".join(f if n == 1 else f"{n}{f}" for n, f in acc)
 
 
 @dataclass
@@ -143,7 +158,7 @@ class Context:
 
     @property
     def struct_format(self) -> str:
-        fields_fmt = "".join(fx.struct_format for fx in self.fields)
+        fields_fmt = join_struct_formats(fx.struct_format for fx in self.fields)
         fmt = f"{self.params.byte_order.value}{fields_fmt}"
         if self._align_next > 1 and (pad := struct.calcsize(fmt) % self._align_next) > 0:
             fmt = f"{fmt}{self._align_next - pad}x"
@@ -353,7 +368,6 @@ class Field(ABC):
         """Return value according to the field's struct format string."""
         raise NotImplementedError
 
-    @abstractmethod
     def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:
         """Update context with the unpacked field value."""
         raise NotImplementedError

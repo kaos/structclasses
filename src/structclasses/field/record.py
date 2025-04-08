@@ -59,6 +59,7 @@ class RecordField(Field):
         """Registers this field to be included in the pack process."""
         # No value/processing needed for the container itself, besides ensuring
         # proper alignment around the record data.
+        # So we don't add self to the context.
         context.align(self.align)
         with context.scope(self.name, packed=self.packed):
             for fld in self.fields:
@@ -74,7 +75,7 @@ class RecordField(Field):
                 fld.unpack(context)
         # Unpack container last, so we can transform the primitive fields into
         # the container object. This also adds alignment padding as needed.
-        context.add(self, align=1 if self.packed else self.align)
+        context.add(self, struct_format="", align=1 if self.packed else self.align)
 
     def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:
         with context.scope(self.name, packed=self.packed):

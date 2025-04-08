@@ -3,15 +3,12 @@
 # See the LICENSE file for details.
 from __future__ import annotations
 
-import struct
-from dataclasses import replace
+from contextlib import nullcontext
 
 # from collections.abc import Mapping
-from itertools import chain, islice
-from typing import Annotated, Any, Iterable, Iterator, TypeVar
+from typing import Annotated, TypeVar
 
 from structclasses.base import MISSING, Context, Field
-from structclasses.field.primitive import PrimitiveType
 
 
 class ArrayField(Field):
@@ -37,13 +34,7 @@ class ArrayField(Field):
         self.unpack_length = None
         if length is not None:
             self.length = length
-        if isinstance(self.length, int):
-            if self.is_packing_bytes:
-                kwargs["fmt"] = f"{self.length * self.elem_field.size()}s"
-            else:
-                kwargs["fmt"] = f"{self.length}{self.elem_field.fmt}"
-        else:
-            assert isinstance(self.length, str)
+        assert isinstance(self.length, (int, str))
         super().__init__(field_type, **kwargs)
 
     def configure(
@@ -56,28 +47,32 @@ class ArrayField(Field):
         self.unpack_length = unpack_length
         return super().configure(**kwargs)
 
-    @property
-    def is_packing_bytes(self) -> bool:
-        return len(self.elem_field.fmt) != 1
-
-    def struct_format(self, context: Context) -> str:
-        # Unpack length is always correct at this point, also when packing.
-        length = self.get_length(context, self.unpack_length)
-        if self.is_packing_bytes:
-            with context.scope(self.name):
-                size = 0
-                for idx in range(length):
-                    with context.scope(idx):
-                        size += self.elem_field.size(context)
-            return f"{size}s"
+    def size(self, context: Context | None = None) -> int:
+        if context is None:
+            if not isinstance(self.length, int):
+                return 0
+            else:
+                length = self.length
+            cm = nullcontext()
         else:
-            return f"{length}{self.elem_field.struct_format(context)}"
+            # Unpack length is always correct at this point, also when packing.
+            length = self.get_length(context, self.unpack_length)
+            cm = context.scope(self.name)
+        with cm:
+            size = 0
+            for idx in range(length):
+                im = context.scope(idx) if context is not None else nullcontext()
+                with im:
+                    size += self.elem_field.size(context)
+        return size
 
     def get_length(self, context: Context, length: str | int | None) -> int:
         if length is None:
             length = self.length
         if isinstance(length, str):
-            length = context.get(length)
+            length = context.get(
+                length, default=self.length, set_default=isinstance(self.length, int)
+            )
         if not isinstance(length, int):
             length = len(length)
         if isinstance(self.length, int) and self.length < length:
@@ -86,10 +81,13 @@ class ArrayField(Field):
 
     def pack(self, context: Context) -> None:
         """Registers this field to be included in the pack process."""
+        length = self.get_length(context, self.pack_length)
         if isinstance(self.unpack_length, str):
             # Update unpack length field when packing.
-            context.set(self.unpack_length, self.get_length(context, self.pack_length))
-        context.add(self)
+            context.set(self.unpack_length, length)
+        for idx in range(length):
+            with context.scope(self.name, idx):
+                self.elem_field.pack(context)
 
     def unpack(self, context: Context) -> None:
         """Registers this field to be included in the unpack process."""
@@ -97,39 +95,14 @@ class ArrayField(Field):
             if context.data:
                 context.unpack()
             if context.get(self.unpack_length or self.length, default=None) is None:
-                context.add(self, struct_format=self.fmt)
-                return
+                if not isinstance(self.length, int):
+                    return
 
-        context.add(self)
-
-    def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
-        length = self.get_length(context, self.pack_length)
-        elem_it = islice(
-            chain(value or [], (self.elem_field.type() for _ in range(length))),
-            length,
-        )
-        if self.is_packing_bytes:
-            ctx = Context(context.params, tuple(elem_it))
-            for idx in range(length):
-                with ctx.scope(idx):
-                    self.elem_field.pack(ctx)
-            yield ctx.pack()
-        else:
-            values_it = chain.from_iterable(
-                self.elem_field.pack_value(context, elem) for elem in elem_it
-            )
-            yield from values_it
-
-    def unpack_value(self, context: Context, values: Iterator[PrimitiveType]) -> Any:
         length = self.get_length(context, self.unpack_length)
-        if self.is_packing_bytes:
-            ctx = Context(context.params, length * [MISSING], next(values))
-            for idx in range(length):
-                with ctx.scope(idx):
-                    self.elem_field.unpack(ctx)
-            return ctx.unpack()
-        else:
-            return [self.elem_field.unpack_value(context, values) for _ in range(length)]
+        context.get(self.name, default=[MISSING] * length)
+        for idx in range(length):
+            with context.scope(self.name, idx):
+                self.elem_field.unpack(context)
 
 
 T = TypeVar("T")

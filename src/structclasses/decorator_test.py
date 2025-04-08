@@ -63,7 +63,7 @@ def test_two_fields():
         b: int8
 
     s = TwoInts(1, 2)
-    assert "=bb" == s._format()
+    assert "=2b" == s._format()
     assert 1 == s.a
     assert 2 == s.b
     assert b"\1\2" == s._pack()
@@ -89,8 +89,8 @@ def test_nested_structures():
         e: int8
 
     s = Outer(c=3, d=Inner(1, 2, Deep(5)), e=4)
-    assert "=bbbBb" == Outer._format()
-    assert "=bbbBb" == s._format()
+    assert "=3bBb" == Outer._format()
+    assert "=3bBb" == s._format()
     assert_roundtrip(s)
     assert len(s) == 5
     assert len(Outer) == 5
@@ -147,7 +147,7 @@ def test_nested_int_array(byte_order: ByteOrder, value: list, size: int, packed:
         xs: array[record[dict, ("x", int), ("y", int)], len(value)]
 
     s = ArrayOfIntRecords(value)
-    assert f"{byte_order.value}{size}s" == s._format()
+    assert f"{byte_order.value}{size//4}i" == s._format()
     assert_roundtrip(s)
     assert packed == s._pack()
     assert len(s) == size
@@ -159,7 +159,7 @@ def test_text_array():
         msgs: array[text[5], 5]
 
     s = TextArray(["a", "bc", "def", "ghij", "klmno"])
-    assert "=25s" == s._format()
+    assert "=5s5s5s5s5s" == s._format()
     assert_roundtrip(s)
     assert len(s) == 25
 
@@ -172,7 +172,7 @@ def test_dynamic_size_array():
 
     s = DynIntArray(3, [11, 22, 33])
     assert "=i" == DynIntArray._format()
-    assert "=i3i" == s._format()
+    assert "=4i" == s._format()
     assert_roundtrip(s)
     assert len(s) == 16
 
@@ -294,8 +294,8 @@ def test_disjoint_dynamic_length_array() -> None:
         items: array[int, 3] = field(pack_length="items", unpack_length="hdr.item_count")
 
     s = DisjointDataLength(HeaderStuff(2), [42, 24])
-    assert "=B3x3i" == DisjointDataLength._format()
-    assert "=B3x2i" == s._format()
+    assert "=B3xi2i" == DisjointDataLength._format()
+    assert "=B3xii" == s._format()
     assert_roundtrip(s)
     assert len(s) == 12
 

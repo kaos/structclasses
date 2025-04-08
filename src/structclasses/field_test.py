@@ -53,7 +53,7 @@ class MyEnum(IntEnum):
         (bytes, binary[3], 1, "=3s", b"123"),
         (dict, record[dict, ("a", int), ("b", bool)], 4, "=i?3x", dict(a=1, b=False)),
         (list[uint16], array[uint16, 5], 2, "=5H", [12, 23, 34, 45, 56]),
-        (list[text[3]], array[text[3], 3], 1, "=9s", ["a", "bc", "def"]),
+        (list[text[3]], array[text[3], 3], 1, "=3s3s3s", ["a", "bc", "def"]),
         (MyEnum, MyEnum, 4, "=i", MyEnum.B),
     ],
 )
