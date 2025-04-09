@@ -79,19 +79,19 @@ class BytesField(PrimitiveField):
 
         if isinstance(self.unpack_length, Field):
             fmt = self.unpack_length.struct_format(context)
+            context.add(self, struct_format=fmt)
+            if context.data:
+                context.unpack()
         else:
-            # Our struct_format gives both the length fmt and our data fmt, but
-            # when unpacking, we need to unpack the length first, or we won't
-            # know how much of data there is.
-            fmt = self.struct_format(context)
-        context.add(self, struct_format=fmt)
+            context.add(self)
 
     def pack_value(self, context: Context, value: Any) -> Iterable[bytes]:
         assert isinstance(value, self.type)
         if isinstance(value, str):
             value = value.encode()
         if isinstance(self.unpack_length, Field):
-            return (*self.unpack_length.pack_value(context, len(value)), value)
+            length = self.get_length(context, self.pack_length)
+            return (*self.unpack_length.pack_value(context, length), value)
         else:
             return (value,)
 
