@@ -99,10 +99,10 @@ class ArrayField(Field):
                 return
 
         length = self.get_length(context, self.unpack_length)
+        context.get(self.name, default=[MISSING] * length)
         if length == 0:
             return
 
-        context.get(self.name, default=[MISSING] * length)
         if not context.data:
             # We can take a short-cut when we're unpacking without data,
             # as this is for determining the default size of the data structure only.
