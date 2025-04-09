@@ -6,7 +6,7 @@ import pytest
 from structclasses.decorator import fields, structclass
 from structclasses.field.data import text
 from structclasses.field.meta import field
-from structclasses.field.primitive import uint64
+from structclasses.field.primitive import int32, uint8, uint32, uint64
 from structclasses.field.union import (
     UnionFieldError,
     UnionFieldSelectorMapError,
@@ -65,7 +65,7 @@ def test_std_c_union() -> None:
     assert_props(uc.prop, None, a=1, b=True)
 
     del uc.prop
-    assert_props(uc.prop, None, a=0, b=False)
+    assert_props(uc.prop, None)
 
 
 def test_selector_union() -> None:
@@ -211,3 +211,43 @@ def test_packed_records(pack_data, pack_union, data_fmt, union_fmt, union_len) -
     assert data_fmt == PackedData(0, "foo", 1)._format()
     assert union_fmt == pu._format()
     assert union_len == len(pu)
+
+
+def test_empty_union() -> None:
+    @structclass
+    class U:
+        buflen: uint32
+        buffer: union[
+            ("a", uint32),  # noqa: F821
+            ("b", int32),  # noqa: F821
+        ] = field(
+            pack_length="buffer",
+            unpack_length="buflen",
+        )
+
+    assert "=I4s" == U._format()
+    assert b"\0\0\0\0" == U(0, b"")._pack()
+    assert U(0, b"") == U._unpack(b"\0\0\0\0")
+
+
+def test_empty_union_selector() -> None:
+    @structclass(packed=True)
+    class U:
+        kind: uint8
+        buflen: uint8
+        buffer: union[
+            ("a", uint32),  # noqa: F821
+            ("b", int32),  # noqa: F821
+        ] = field(
+            selector="kind",
+            field_selector_map=dict(a=1, b=2),
+            pack_length="buffer",
+            unpack_length="buflen",
+        )
+
+    u = U(1, 0, b"")
+    assert "=2B4s" == U._format()
+    assert u == U._unpack(b"\1\0")
+    assert u.buffer.__value__ is None
+    assert b"\1\0" == u._pack()
+    assert 0 == u.buflen

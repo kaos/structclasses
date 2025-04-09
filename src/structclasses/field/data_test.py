@@ -3,10 +3,10 @@
 # See the LICENSE file for details.
 import pytest
 
+from structclasses import field, structclass, uint8
 from structclasses.base import Context
 from structclasses.field.data import BytesField, binary, text
 from structclasses.field.primitive import uint32
-from structclasses import structclass, field, uint8
 
 
 def test_text_field_with_length_prefix() -> None:

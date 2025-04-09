@@ -186,9 +186,9 @@ class UnionField(Field):
         context.add(self)
 
     def pack_value(self, context: Context, value: Any) -> Iterable[PrimitiveType]:
-        if not self.fields:
-            return (b"",)
         assert isinstance(value, UnionPropertyValue)
+        if not self.fields or not value.__data__:
+            return (b"",)
         ctx = context.new(root=value)
         self.selected(context).pack(ctx)
         return (ctx.pack(),)
@@ -216,6 +216,7 @@ class UnionPropertyValue:
     def __init__(self, union_field: UnionField, context: Context) -> None:
         object.__setattr__(self, "_UnionPropertyValue__union", union_field)
         object.__setattr__(self, "_UnionPropertyValue__context", context)
+        object.__setattr__(self, "_UnionPropertyValue__data", b"")
         object.__setattr__(self, "_UnionPropertyValue__values", {})
         object.__setattr__(self, "_UnionPropertyValue__selected", None)
 
@@ -234,6 +235,8 @@ class UnionPropertyValue:
         return True
 
     def __len__(self) -> int:
+        if not self.__data__:
+            return 0
         return self.__union.selected_size(self.__context)
 
     @property
@@ -246,6 +249,8 @@ class UnionPropertyValue:
 
     @property
     def __value__(self) -> Any:
+        if not self.__data__:
+            return None
         fld = self.__union.selected(self.__context)
         return getattr(self, fld.name)
 
@@ -280,6 +285,9 @@ class UnionPropertyValue:
             if self.__selected != self.__kind__:
                 # Reset data if kind changes, to avoid parsing data from unrelated types.
                 self.__data__ = b"\0" * fld.size()
+            elif not self.__data__:
+                raise UnionValueNotActiveError(name)
+
             ctx = self.__context.new(root={}, data=self.__data)
             fld.unpack(ctx)
             self.__values[name] = ctx.unpack()[fld.name]
@@ -335,4 +343,4 @@ class UnionProperty:
 
     def __delete__(self, obj) -> None:
         prop = self.__get__(obj)
-        prop.__data__ = b"\0" * len(prop.__data__)
+        prop.__data__ = b""
