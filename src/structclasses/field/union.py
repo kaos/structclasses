@@ -143,7 +143,6 @@ class UnionField(Field):
         # size = self.selected_size(context)
         if length is None:
             length = self.selected_size(context)
-            print(f" -- get_length {length=} {self.name=} {self.selected(context)=}")
         if isinstance(length, str):
             length = context.get(length)
         elif isinstance(length, Field):
