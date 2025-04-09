@@ -294,7 +294,7 @@ def test_disjoint_dynamic_length_array() -> None:
         items: array[int, 3] = field(pack_length="items", unpack_length="hdr.item_count")
 
     s = DisjointDataLength(HeaderStuff(2), [42, 24])
-    assert "=B3xi2i" == DisjointDataLength._format()
+    assert "=B" == DisjointDataLength._format()
     assert "=B3xii" == s._format()
     assert_roundtrip(s)
     assert len(s) == 12

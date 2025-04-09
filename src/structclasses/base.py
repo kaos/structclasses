@@ -74,6 +74,8 @@ def lookup(obj: Any, attr: str | int, *attrs: str | int) -> Any:
 def join_struct_formats(fmts: Iterable[str]) -> str:
     acc = []
     for fmt in fmts:
+        if not fmt:
+            continue
         if m := re.match(r"(\d+)(\w)$", fmt):
             n, f = m.groups()
         else:

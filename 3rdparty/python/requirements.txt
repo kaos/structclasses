@@ -1,4 +1,5 @@
 black
 pytest
+pytest-timeout
 twine
 typing-extensions

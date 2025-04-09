@@ -23,7 +23,9 @@ class ArrayField(Field):
             elem_field = Field._create_field(elem_type)
         ns = dict(elem_field=elem_field, length=length)
         return cls._create_specialized_class(
-            f"{cls.__name__}__{length}x__{type(elem_field).__name__}", ns
+            f"{cls.__name__}__{length}x__{type(elem_field).__name__}",
+            ns,
+            unique=True,
         )
 
     def __init__(self, field_type: type, length: int | str | None = None, **kwargs) -> None:
@@ -70,9 +72,7 @@ class ArrayField(Field):
         if length is None:
             length = self.length
         if isinstance(length, str):
-            length = context.get(
-                length, default=self.length, set_default=isinstance(self.length, int)
-            )
+            length = context.get(length)
         if not isinstance(length, int):
             length = len(length)
         if isinstance(self.length, int) and self.length < length:
@@ -95,11 +95,27 @@ class ArrayField(Field):
             if context.data:
                 context.unpack()
             if context.get(self.unpack_length or self.length, default=None) is None:
-                if not isinstance(self.length, int):
-                    return
+                # Unknown length for dynamic length array.
+                return
 
         length = self.get_length(context, self.unpack_length)
+        if length == 0:
+            return
+
         context.get(self.name, default=[MISSING] * length)
+        if not context.data:
+            # We can take a short-cut when we're unpacking without data,
+            # as this is for determining the default size of the data structure only.
+            try:
+                with context.scope(self.name, 0):
+                    item_size = self.elem_field.size(context)
+            except ValueError:
+                # Dynamic sized items does not work without data to unpack.
+                return
+            else:
+                context.add(self, struct_format=f"{length * item_size}s")
+                return
+
         for idx in range(length):
             with context.scope(self.name, idx):
                 self.elem_field.unpack(context)
