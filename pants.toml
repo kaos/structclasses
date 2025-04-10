@@ -24,7 +24,7 @@ backend_packages = [
 args = "-i 4"
 
 [python]
-interpreter_constraints = [">=3.10,<3.13"]
+interpreter_constraints = [">=3.10,<3.14"]
 enable_resolves = true
 
 [python.resolves]
